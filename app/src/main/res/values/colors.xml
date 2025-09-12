@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Adaptive icon arka planı -->
     <color name="ic_launcher_background">#FFFFFF</color>
 
-    <!-- (İsteğe bağlı) Uygulama renkleri -->
+    <!-- Uygulama renkleri (opsiyonel) -->
     <color name="purple_200">#BB86FC</color>
     <color name="purple_500">#6200EE</color>
     <color name="purple_700">#3700B3</color>
