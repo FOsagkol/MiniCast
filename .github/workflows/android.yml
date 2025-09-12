@@ -18,13 +18,22 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle 8.10.2
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.10.2
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "build-tools;34.0.0" \
+            "platforms;android-34"
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --warning-mode all
+        run: ./gradlew --no-daemon clean assembleDebug --warning-mode all
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
