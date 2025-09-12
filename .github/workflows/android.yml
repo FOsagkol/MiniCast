@@ -2,9 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
@@ -17,28 +15,35 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+      # Android SDK'yi kurar (sdkmanager/cmdline-tools dahil)
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      # Gradle'ı wrapper KULLANMADAN kuruyoruz (bozuk wrapper'a hiç dokunmuyoruz)
+      - name: Set up Gradle 8.7 (no wrapper)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
 
-      - name: Inspect Gradle wrapper JAR
+      # Gerekli platform ve build-tools'ları al (gerekirse sürümü değiştir)
+      - name: Install Android SDK components
         run: |
-          set -e
-          sudo apt-get update -y && sudo apt-get install -y unzip
-          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "✅ Found gradle/wrapper/gradle-wrapper.jar"
-            unzip -l gradle/wrapper/gradle-wrapper.jar | sed -n '1,200p'
-          else
-            echo "❌ gradle/wrapper/gradle-wrapper.jar NOT FOUND"
-            echo "Repo tree for context:" 
-            ls -R
-            exit 1
-          fi
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
+      # DİKKAT: ./gradlew YOK! Doğrudan 'gradle' komutu kullanılıyor
       - name: Build debug APK
-        run: ./gradlew --no-daemon clean :app:assembleDebug --stacktrace --warning-mode all
+        run: |
+          gradle --no-daemon clean :app:assembleDebug --stacktrace --warning-mode all
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
