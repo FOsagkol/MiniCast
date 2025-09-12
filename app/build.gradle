@@ -1,13 +1,15 @@
-apply plugin: 'com.android.application'
+plugins {
+    id("com.android.application")
+}
 
 android {
-    compileSdkVersion 29
-    buildToolsVersion "29.0.3"
+    namespace "com.example.minicast"
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.example.minicast"
-        minSdkVersion 16
-        targetSdkVersion 29
+        minSdk 21
+        targetSdk 34
         versionCode 1
         versionName "1.0"
     }
@@ -15,15 +17,27 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        viewBinding true
     }
 }
 
 dependencies {
-    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "androidx.appcompat:appcompat:1.6.1"
     implementation "com.google.android.material:material:1.12.0"
     implementation "androidx.browser:browser:1.8.0"
     implementation "androidx.mediarouter:mediarouter:1.6.0"
-    implementation "com.google.android.gms:play-services-cast-framework:21.3.0"
+    implementation "com.google.android.gms:play-services-cast-framework:21.5.0"
 }
