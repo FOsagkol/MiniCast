@@ -18,17 +18,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Android SDK'yi kurar (sdkmanager/cmdline-tools dahil)
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # Gradle'ı wrapper KULLANMADAN kuruyoruz (bozuk wrapper'a hiç dokunmuyoruz)
-      - name: Set up Gradle 8.7 (no wrapper)
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.7"
+      - name: Install Gradle 8.7 via SDKMAN (no wrapper)
+        run: |
+          curl -s "https://get.sdkman.io" | bash
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk install gradle 8.7
+          gradle --version
 
-      # Gerekli platform ve build-tools'ları al (gerekirse sürümü değiştir)
       - name: Install Android SDK components
         run: |
           sdkmanager --install \
@@ -36,7 +35,6 @@ jobs:
             "platforms;android-34" \
             "build-tools;34.0.0"
 
-      # DİKKAT: ./gradlew YOK! Doğrudan 'gradle' komutu kullanılıyor
       - name: Build debug APK
         run: |
           gradle --no-daemon clean :app:assembleDebug --stacktrace --warning-mode all
