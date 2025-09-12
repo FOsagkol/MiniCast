@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-  pull_request:
+    branches: [ "main" ]
 
 jobs:
   build:
@@ -17,25 +17,28 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install Android SDK components
         run: |
-          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses
-          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "build-tools;34.0.0" \
-            "platforms;android-34"
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      # Gradle'ı WRAPPER KULLANMADAN çalıştır
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
       - name: Build debug APK
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: 8.7
-          arguments: :app:assembleDebug --stacktrace
+          arguments: --no-daemon clean :app:assembleDebug --stacktrace
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: MiniCast-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
