@@ -4,7 +4,7 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Basit bir örnek şekil: daire + harf. İsterseniz sonra değiştiririz -->
+    <!-- Basit örnek: mavi daire + beyaz M harfi -->
     <path
         android:fillColor="#2196F3"
         android:pathData="M54,4a50,50 0 1,0 0,100a50,50 0 1,0 0,-100z"/>
