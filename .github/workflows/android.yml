@@ -17,7 +17,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -29,11 +28,11 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
       - name: Build debug APK
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: 8.7
-          arguments: --no-daemon clean :app:assembleDebug --stacktrace
+        run: ./gradlew --no-daemon clean :app:assembleDebug --stacktrace
 
       - name: Upload APK
         if: success()
