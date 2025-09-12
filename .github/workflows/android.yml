@@ -2,7 +2,6 @@ name: Android CI
 
 on:
   push:
-    branches: [ "main" ]
   pull_request:
 
 jobs:
@@ -17,23 +16,15 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      # Gerekli Android SDK bileşenlerini kur
-      - name: Install Android SDK components
-        run: |
-          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses
-          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "build-tools;34.0.0" \
-            "platforms;android-34"
-
-      # Gradle'ı WRAPPER OLMADAN çalıştır (gradle 8.10.2'yi kendi indirir)
-      - name: Build debug APK
-        uses: gradle/gradle-build-action@v3
+      - name: Set up Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.10.2
-          arguments: :app:assembleDebug
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --warning-mode all
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
