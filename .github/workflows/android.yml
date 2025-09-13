@@ -8,7 +8,11 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    - name: Build debug APK (verbose)
+  run: |
+    ./gradlew --no-daemon --stacktrace --info \
+      :app:compileDebugJavaWithJavac \
+      :app:assembleDebug
 
     steps:
       - name: Checkout
