@@ -8,11 +8,7 @@ on:
 
 jobs:
   build:
-    - name: Build debug APK (verbose)
-  run: |
-    ./gradlew --no-daemon --stacktrace --info \
-      :app:compileDebugJavaWithJavac \
-      :app:assembleDebug
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -34,13 +30,21 @@ jobs:
         with:
           gradle-version: "8.7"
 
+      # Derleme (javac hatasını ve tüm ayrıntıları gösterecek)
+      - name: Build debug APK (verbose)
+        run: |
+          ./gradlew --no-daemon --stacktrace --info \
+            :app:compileDebugJavaWithJavac \
+            :app:assembleDebug
+
+      # Düşerse, hedefli teşhis logları üret
       - name: Build debug APK (verbose → log dosyasına)
+        if: failure()
         run: |
           set -eo pipefail
           mkdir -p build-logs
-          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build-logs/assembleDebug.log
+          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build-logs/assembleDebug.log || true
 
-      # Düşerse, sırayla daraltıp ilk gerçek HATA satırını çıkar
       - name: Diagnose Java compile (if failed)
         if: failure()
         run: |
