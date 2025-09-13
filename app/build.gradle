@@ -1,16 +1,37 @@
 plugins {
-    id("com.android.application")
-    // id("org.jetbrains.kotlin.android") // Kotlin kullanmıyorsan kapalı kalsın
+    id 'com.android.application'
+    // Eğer Kotlin kullanıyorsan aç:
+    // id 'org.jetbrains.kotlin.android'
 }
-android {
-    // ... mevcut ayarların kalacak
 
+android {
+    namespace 'com.example.minicast'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.example.minicast'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // Java 17
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    // Eğer Kotlin kullanıyorsan aç:
+    // kotlinOptions { jvmTarget = '17' }
 
-    // Lint/uyarılar build'i kırmasın
+    // Uyarılar derlemeyi kırmasın (CI için)
     lint {
         abortOnError false
         warningsAsErrors false
@@ -18,38 +39,13 @@ android {
     }
 }
 
-// Javac uyarılarını hata yapma ve çıktıyı göster
-tasks.withType(JavaCompile).configureEach {
-    options.warnings = false
-    options.compilerArgs += [
-            "-Xlint:none",      // tüm lint uyarılarını kapat
-            "-nowarn",          // javac uyarılarını bastır
-            "-Xdiags:verbose"   // hata olduğunda ayrıntılı teşhis satırları
-    ]
-}
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-    // kotlinOptions { jvmTarget = "17" } // Kotlin kullanıyorsan aç
-}
-
 dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // Google Cast framework (DERLENMEYEN siniflari bu ekler)
-    implementation 'com.google.android.gms:play-services-cast-framework:21.4.0'
-    // Cast framework'ün istediği MediaRouter
-    implementation 'androidx.mediarouter:mediarouter:1.6.0'
-
-    // (varsa) diğer mevcut bağımlılıkların…
+    // Google Cast framework (MyCastOptionsProvider vs. için gerekli)
+    implementation 'com.google.android.gms:play-services-cast-framework:22.1.0'
+    implementation 'androidx.mediarouter:mediarouter:1.8.1'
 }
