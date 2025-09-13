@@ -1,60 +1,49 @@
 plugins {
-    id 'com.android.application'
-    // Kotlin kullanmıyorsan kapalı kalsın:
-    // id 'org.jetbrains.kotlin.android'
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace 'com.example.minicast'
+    namespace "com.example.minicast"
     compileSdk 34
 
     defaultConfig {
-        applicationId 'com.example.minicast'
-        minSdk 21
+        applicationId "com.example.minicast"
+        minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 
-    // Java 17
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    // Eğer Kotlin kullanıyorsan aç:
-    // kotlinOptions { jvmTarget = '17' }
 
-    // CI'da uyarılar build'i kırmasın
-    lint {
-        abortOnError false
-        warningsAsErrors false
-        checkReleaseBuilds false
+    kotlinOptions {
+        jvmTarget = "17"
     }
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.13.1'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.android.material:material:1.12.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "com.google.android.material:material:1.12.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
 
-    // (Cast geçici kapatacaksan bunlar kalsa da sorun olmaz;
-    // ileride tekrar aktif edeceğiz)
-    implementation 'com.google.android.gms:play-services-cast-framework:22.1.0'
-    implementation 'androidx.mediarouter:mediarouter:1.8.1'
-}
+    // Cast SDK
+    implementation "com.google.android.gms:play-services-cast-framework:21.3.0"
 
-/* --- DIAGNOSTIC: javac çıktısını netleştir (HATA SATIRINI GÖSTER) --- */
-tasks.withType(JavaCompile).configureEach {
-    // Ayrıntılı tanı çıktısı
-    options.compilerArgs += ["-Xdiags:verbose"]
-    // Uyarılar build'i bozmasın
-    options.warnings = false
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.6.1"
 }
