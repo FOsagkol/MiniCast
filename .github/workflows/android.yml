@@ -1,4 +1,4 @@
-name: Android CI
+name: Android CI (diagnostic-hard)
 
 on:
   push:
@@ -30,11 +30,43 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Build debug APK (verbose)
+      - name: Build debug APK (verbose → log dosyasına)
         run: |
-          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all
+          set -eo pipefail
+          mkdir -p build-logs
+          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build-logs/assembleDebug.log
 
-      - name: Upload APK
+      # Düşerse, sırayla daraltıp ilk gerçek HATA satırını çıkar
+      - name: Diagnose Java compile (if failed)
+        if: failure()
+        run: |
+          set -eo pipefail
+          mkdir -p build-logs
+          gradle --no-daemon :app:compileDebugJavaWithJavac --stacktrace --info | tee build-logs/compileDebugJavaWithJavac.log || true
+
+      - name: Diagnose resources (AAPT2) (if failed)
+        if: failure()
+        run: |
+          set -eo pipefail
+          mkdir -p build-logs
+          gradle --no-daemon :app:processDebugResources --stacktrace --info | tee build-logs/processDebugResources.log || true
+
+      - name: Diagnose manifest merge (if failed)
+        if: failure()
+        run: |
+          set -eo pipefail
+          mkdir -p build-logs
+          gradle --no-daemon :app:processDebugMainManifest --stacktrace --info | tee build-logs/processDebugMainManifest.log || true
+
+      - name: Upload logs (ALWAYS)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build-logs/*.log
+          if-no-files-found: warn
+
+      - name: Upload APK (success only)
         if: success()
         uses: actions/upload-artifact@v4
         with:
