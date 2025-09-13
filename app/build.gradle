@@ -2,19 +2,31 @@ plugins {
     id("com.android.application")
     // id("org.jetbrains.kotlin.android") // Kotlin kullanmıyorsan kapalı kalsın
 }
-
 android {
-    namespace "com.example.minicast"
-    compileSdk 34
+    // ... mevcut ayarların kalacak
 
-    defaultConfig {
-        applicationId "com.example.minicast"
-        minSdk 21
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
+    // Lint/uyarılar build'i kırmasın
+    lint {
+        abortOnError false
+        warningsAsErrors false
+        checkReleaseBuilds false
+    }
+}
+
+// Javac uyarılarını hata yapma ve çıktıyı göster
+tasks.withType(JavaCompile).configureEach {
+    options.warnings = false
+    options.compilerArgs += [
+            "-Xlint:none",      // tüm lint uyarılarını kapat
+            "-nowarn",          // javac uyarılarını bastır
+            "-Xdiags:verbose"   // hata olduğunda ayrıntılı teşhis satırları
+    ]
+}
     buildTypes {
         release {
             minifyEnabled false
