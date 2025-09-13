@@ -1,4 +1,4 @@
-name: Android CI (diagnostic-hard)
+name: Android CI
 
 on:
   push:
@@ -23,42 +23,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-34 build-tools;34.0.0'
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
 
-      - name: Set up Gradle 8.7 (no wrapper)
+      - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      - name: Build debug APK (verbose → log dosyasına)
+      - name: Build debug APK (verbose)
+        shell: bash
         run: |
           set -eo pipefail
           mkdir -p build-logs
           gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build-logs/assembleDebug.log
 
-      # Düşerse, sırayla daraltıp ilk gerçek HATA satırını çıkar
-      - name: Diagnose Java compile (if failed)
-        if: failure()
-        run: |
-          set -eo pipefail
-          mkdir -p build-logs
-          gradle --no-daemon :app:compileDebugJavaWithJavac --stacktrace --info | tee build-logs/compileDebugJavaWithJavac.log || true
-
-      - name: Diagnose resources (AAPT2) (if failed)
-        if: failure()
-        run: |
-          set -eo pipefail
-          mkdir -p build-logs
-          gradle --no-daemon :app:processDebugResources --stacktrace --info | tee build-logs/processDebugResources.log || true
-
-      - name: Diagnose manifest merge (if failed)
-        if: failure()
-        run: |
-          set -eo pipefail
-          mkdir -p build-logs
-          gradle --no-daemon :app:processDebugMainManifest --stacktrace --info | tee build-logs/processDebugMainManifest.log || true
-
-      - name: Upload logs (ALWAYS)
+      - name: Upload logs (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -72,4 +53,3 @@ jobs:
         with:
           name: app-debug.apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
