@@ -1,39 +1,27 @@
-package com.example.minicast;
+package com.example.minicast;  // adjust package name as needed
 
 import android.content.Context;
-
-import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.framework.CastOptions;
 import com.google.android.gms.cast.framework.OptionsProvider;
 import com.google.android.gms.cast.framework.SessionProvider;
-import com.google.android.gms.cast.framework.media.CastMediaOptions;
-import com.google.android.gms.cast.framework.media.NotificationOptions;
-
 import java.util.List;
 
+/** Provides Cast configuration options for the Cast SDK. */
 public class MyCastOptionsProvider implements OptionsProvider {
 
     @Override
     public CastOptions getCastOptions(Context context) {
-        // Notification + expanded controller activity
-        NotificationOptions notificationOptions = new NotificationOptions.Builder()
-                .setTargetActivityClassName(ExpandedControlsActivity.class.getName())
-                .build();
-
-        CastMediaOptions mediaOptions = new CastMediaOptions.Builder()
-                .setNotificationOptions(notificationOptions)
-                .setExpandedControllerActivityClassName(ExpandedControlsActivity.class.getName())
-                .build();
-
-        // Use the Default Media Receiver on Chromecast
+        // Replace R.string.app_id with your receiver application ID (in strings.xml)
         return new CastOptions.Builder()
-                .setReceiverApplicationId(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
-                .setCastMediaOptions(mediaOptions)
+                .setReceiverApplicationId(context.getString(R.string.app_id))
                 .build();
     }
 
     @Override
     public List<SessionProvider> getAdditionalSessionProviders(Context context) {
+        // Return null if not using additional session providers
         return null;
+    }
+}        return null;
     }
 }
