@@ -27,17 +27,28 @@ jobs:
             platforms;android-34
             build-tools;34.0.0
 
+      # This action adds a specific Gradle version to PATH
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
+
+      # Sanity check: confirm gradle is on PATH and show version
+      - name: Check Gradle availability
+        shell: bash
+        run: |
+          which gradle || true
+          gradle -v || true
 
       - name: Build debug APK (verbose)
         shell: bash
         run: |
           set -eo pipefail
           mkdir -p build-logs
-          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build-logs/assembleDebug.log
+          # Pre-create the log so artifact upload always finds a file
+          : > build-logs/assembleDebug.log
+          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all \
+            | tee -a build-logs/assembleDebug.log
 
       - name: Upload logs (always)
         if: always()
