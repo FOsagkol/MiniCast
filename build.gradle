@@ -1,19 +1,17 @@
 plugins {
-    id("com.android.application") version "8.5.2" apply false
-    id("com.android.library")     version "8.5.2" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+    id 'com.android.application' version '8.5.2' apply false
+    id 'com.android.library'     version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
 }
 
-tasks.register("clean", Delete) {
-    delete(rootProject.buildDir)
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
 }
+
 buildscript {
     repositories {
         google()
         mavenCentral()
-    }
-    dependencies {
-        // boş bırakılabilir; modern AGP için şart değil
     }
 }
 
