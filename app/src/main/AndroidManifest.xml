@@ -19,10 +19,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Gerekirse sonra açarız:
+        <!-- 🔴 Cast Framework provider bildirimi -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.example.minicast.MyCastOptionsProvider"/>
-        -->
     </application>
 </manifest>
