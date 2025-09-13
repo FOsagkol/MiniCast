@@ -1,4 +1,4 @@
-name: Android CI (diagnostic)
+name: Android CI
 
 on:
   push:
@@ -22,47 +22,17 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK components
-        run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
 
       - name: Set up Gradle 8.7 (no wrapper)
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      - name: Print env & Gradle version
-        run: |
-          echo "JAVA_HOME=$JAVA_HOME"
-          java -version
-          gradle -v
-
-      - name: Show project tree
-        run: |
-          echo "== AndroidManifest =="
-          sed -n '1,200p' app/src/main/AndroidManifest.xml || true
-          echo "== res/values =="
-          ls -lah app/src/main/res/values || true
-          echo "== res/layout =="
-          ls -lah app/src/main/res/layout || true
-          echo "== res/mipmap-anydpi-v26 =="
-          ls -lah app/src/main/res/mipmap-anydpi-v26 || true
-          echo "== res/drawable =="
-          ls -lah app/src/main/res/drawable || true
-
       - name: Build debug APK (verbose)
         run: |
           gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all
-
-      - name: Diagnose only AAPT2 if failed
-        if: failure()
-        run: |
-          echo "Retrying :app:processDebugResources to reveal the FIRST error clearly..."
-          gradle --no-daemon :app:processDebugResources --stacktrace --info
 
       - name: Upload APK
         if: success()
