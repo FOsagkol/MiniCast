@@ -30,12 +30,14 @@ android {
 }
 
 dependencies {
-    implementation "androidx.core:core-ktx:1.13.1"
-    implementation "androidx.appcompat:appcompat:1.7.0"
-    implementation "com.google.android.material:material:1.12.0"
-    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // 🔴 Cast framework ve MediaRouter → HATAYI ÇÖZENLER
-    implementation "com.google.android.gms:play-services-cast-framework:22.1.0"
-    implementation "androidx.mediarouter:mediarouter:1.8.1"
+    // Google Cast framework (DERLENMEYEN siniflari bu ekler)
+    implementation 'com.google.android.gms:play-services-cast-framework:21.4.0'
+    // Cast framework'ün istediği MediaRouter
+    implementation 'androidx.mediarouter:mediarouter:1.6.0'
+
+    // (varsa) diğer mevcut bağımlılıkların…
 }
