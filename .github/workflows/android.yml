@@ -23,49 +23,58 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-34 build-tools;34.0.0'
+          packages: "platforms;android-34 build-tools;34.0.0"
 
       - name: Set up Gradle 8.7 (no wrapper)
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      # Derleme: javac hatasını ve tüm ayrıntıları göster
-      - name: Build debug APK (verbose)
+      # Ana derleme - ayrıntılı log
+      - name: Build debug APK (verbose → assembleDebug.log)
         run: |
-          ./gradlew --no-daemon --stacktrace --info --console=plain \
-            :app:compileDebugJavaWithJavac \
-            :app:assembleDebug
+          set -eo pipefail
+          mkdir -p build-logs
+          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all \
+            | tee build-logs/assembleDebug.log
 
-      # Düşerse, hedefli teşhis logları üret ve artefact olarak yükle
-      - name: Build debug APK (verbose → log dosyasına)
+      # Düşerse: Java derlemesini ayrı logla dene
+      - name: Diagnose compileDebugJavaWithJavac (if failed)
         if: failure()
         run: |
           set -eo pipefail
           mkdir -p build-logs
-          gradle --no-daemon clean :app:assembleDebug --stacktrace --info --warning-mode all | tee build-logs/assembleDebug.log || true
+          gradle --no-daemon :app:compileDebugJavaWithJavac --stacktrace --info \
+            | tee build-logs/compileDebugJavaWithJavac.log || true
 
-      - name: Diagnose Java compile (if failed)
+      # Düşerse: Kaynak işleme (AAPT2)
+      - name: Diagnose processDebugResources (if failed)
         if: failure()
         run: |
           set -eo pipefail
           mkdir -p build-logs
-          gradle --no-daemon :app:compileDebugJavaWithJavac --stacktrace --info | tee build-logs/compileDebugJavaWithJavac.log || true
+          gradle --no-daemon :app:processDebugResources --stacktrace --info \
+            | tee build-logs/processDebugResources.log || true
 
-      - name: Diagnose resources (AAPT2) (if failed)
+      # Düşerse: Manifest birleştirme
+      - name: Diagnose processDebugMainManifest (if failed)
         if: failure()
         run: |
           set -eo pipefail
           mkdir -p build-logs
-          gradle --no-daemon :app:processDebugResources --stacktrace --info | tee build-logs/processDebugResources.log || true
+          gradle --no-daemon :app:processDebugMainManifest --stacktrace --info \
+            | tee build-logs/processDebugMainManifest.log || true
 
-      - name: Diagnose manifest merge (if failed)
+      # ⬇️ Düşerse: Paketleme adımı (tam istediğin adım)
+      - name: Diagnose packageDebug (if failed)
         if: failure()
         run: |
           set -eo pipefail
           mkdir -p build-logs
-          gradle --no-daemon :app:processDebugMainManifest --stacktrace --info | tee build-logs/processDebugMainManifest.log || true
+          gradle --no-daemon :app:packageDebug --stacktrace --info \
+            | tee build-logs/packageDebug.log || true
 
+      # Logları her durumda yükle
       - name: Upload logs (ALWAYS)
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,6 +83,7 @@ jobs:
           path: build-logs/*.log
           if-no-files-found: warn
 
+      # Başarılıysa APK’yı yükle
       - name: Upload APK (success only)
         if: success()
         uses: actions/upload-artifact@v4
@@ -81,3 +91,4 @@ jobs:
           name: app-debug.apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+```0
