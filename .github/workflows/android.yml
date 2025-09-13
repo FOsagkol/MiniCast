@@ -30,14 +30,14 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      # Derleme (javac hatasını ve tüm ayrıntıları gösterecek)
+      # Derleme: javac hatasını ve tüm ayrıntıları göster
       - name: Build debug APK (verbose)
         run: |
-          ./gradlew --no-daemon --stacktrace --info \
+          ./gradlew --no-daemon --stacktrace --info --console=plain \
             :app:compileDebugJavaWithJavac \
             :app:assembleDebug
 
-      # Düşerse, hedefli teşhis logları üret
+      # Düşerse, hedefli teşhis logları üret ve artefact olarak yükle
       - name: Build debug APK (verbose → log dosyasına)
         if: failure()
         run: |
