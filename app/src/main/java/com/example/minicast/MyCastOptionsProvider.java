@@ -1,18 +1,21 @@
 package com.example.minicast;
 
-// Geçici olarak devre dışı (safe mode)
-/*
+import android.content.Context;
+
 import com.google.android.gms.cast.framework.CastOptions;
 import com.google.android.gms.cast.framework.OptionsProvider;
 import com.google.android.gms.cast.framework.SessionProvider;
-import android.content.Context;
+
 import java.util.List;
 
 public class MyCastOptionsProvider implements OptionsProvider {
+
     @Override
     public CastOptions getCastOptions(Context context) {
-        // Şimdilik boş
-        return null;
+        return new CastOptions.Builder()
+                // Default receiver app (Google Cast)
+                .setReceiverApplicationId(CastOptions.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
+                .build();
     }
 
     @Override
@@ -20,4 +23,3 @@ public class MyCastOptionsProvider implements OptionsProvider {
         return null;
     }
 }
-*/
