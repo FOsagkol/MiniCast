@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Manifest: android:theme="@style/Theme.MiniCast" -->
     <style name="Theme.MiniCast" parent="Theme.MaterialComponents.DayNight.NoActionBar"/>
 </resources>
