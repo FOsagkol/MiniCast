@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.application'
-    // Eğer Kotlin kullanıyorsan aç:
+    // Kotlin kullanmıyorsan kapalı kalsın:
     // id 'org.jetbrains.kotlin.android'
 }
 
@@ -31,7 +31,7 @@ android {
     // Eğer Kotlin kullanıyorsan aç:
     // kotlinOptions { jvmTarget = '17' }
 
-    // Uyarılar derlemeyi kırmasın (CI için)
+    // CI'da uyarılar build'i kırmasın
     lint {
         abortOnError false
         warningsAsErrors false
@@ -45,7 +45,16 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // Google Cast framework (MyCastOptionsProvider vs. için gerekli)
+    // (Cast geçici kapatacaksan bunlar kalsa da sorun olmaz;
+    // ileride tekrar aktif edeceğiz)
     implementation 'com.google.android.gms:play-services-cast-framework:22.1.0'
     implementation 'androidx.mediarouter:mediarouter:1.8.1'
+}
+
+/* --- DIAGNOSTIC: javac çıktısını netleştir (HATA SATIRINI GÖSTER) --- */
+tasks.withType(JavaCompile).configureEach {
+    // Ayrıntılı tanı çıktısı
+    options.compilerArgs += ["-Xdiags:verbose"]
+    // Uyarılar build'i bozmasın
+    options.warnings = false
 }
