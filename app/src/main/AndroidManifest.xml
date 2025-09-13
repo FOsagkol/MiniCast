@@ -19,7 +19,7 @@
             </intent-filter>
         </activity>
 
-        <!-- (İstersen sonra tekrar ekleriz)
+        <!-- Gerekirse sonra açarız:
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.example.minicast.MyCastOptionsProvider"/>
