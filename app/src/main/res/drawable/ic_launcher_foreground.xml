@@ -4,11 +4,9 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Mavi daire -->
     <path
         android:fillColor="#2196F3"
         android:pathData="M54,4a50,50 0 1,0 0,100a50,50 0 1,0 0,-100z"/>
-    <!-- Beyaz M -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M40,75 L68,75 L68,67 L49,67 L49,60 L65,60 L65,52 L49,52 L49,41 L68,41 L68,33 L40,33 z"/>
