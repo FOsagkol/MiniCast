@@ -1,26 +1,23 @@
 package com.example.minicast;
 
-import android.content.Context;
-import com.google.android.gms.cast.CastMediaControlIntent;
-import com.google.android.gms.cast.framework.CastMediaOptions;
+// Geçici olarak devre dışı (safe mode)
+/*
 import com.google.android.gms.cast.framework.CastOptions;
 import com.google.android.gms.cast.framework.OptionsProvider;
 import com.google.android.gms.cast.framework.SessionProvider;
-import java.util.Collections;
+import android.content.Context;
 import java.util.List;
 
 public class MyCastOptionsProvider implements OptionsProvider {
     @Override
     public CastOptions getCastOptions(Context context) {
-        CastMediaOptions mediaOptions = new CastMediaOptions.Builder().build();
-        return new CastOptions.Builder()
-                .setReceiverApplicationId(
-                        CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
-                .setCastMediaOptions(mediaOptions)
-                .build();
+        // Şimdilik boş
+        return null;
     }
+
     @Override
     public List<SessionProvider> getAdditionalSessionProviders(Context context) {
-        return Collections.emptyList();
+        return null;
     }
 }
+*/
