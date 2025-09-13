@@ -23,7 +23,8 @@ jobs:
         with:
           packages: 'platforms;android-33 build-tools;33.0.0'
           accept-android-sdk-licenses: true
-
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon
 
