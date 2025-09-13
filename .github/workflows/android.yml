@@ -1,17 +1,13 @@
-name: Android CI
+name: Build APK
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:  # allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,38 +16,20 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # Install SDK platform 34 and latest build-tools 34.0.2 in one line:
-          packages: 'platforms;android-34 build-tools;34.0.2'
-          accept-android-sdk-licenses: true  # automatically accept licenses
+          packages: 'platforms;android-33 build-tools;33.0.0'
+          accept-android-sdk-licenses: true
 
-      - name: Set up Gradle (cache Gradle files)
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x gradlew
-
-      - name: Build Debug APK (with verbose logs)
-        run: |
-          mkdir -p build-logs
-          ./gradlew clean assembleDebug --stacktrace --info --no-daemon --warning-mode all \
-            | tee build-logs/assembleDebug.log
-
-      - name: Upload build logs
-        if: always()  # run even if build fails, to upload logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: build-logs/*.log
-          if-no-files-found: warn
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload Debug APK
-        if: success()  # only if the build step succeeded
         uses: actions/upload-artifact@v4
         with:
           name: debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
