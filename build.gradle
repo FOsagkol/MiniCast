@@ -7,3 +7,19 @@ plugins {
 tasks.register("clean", Delete) {
     delete(rootProject.buildDir)
 }
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // boş bırakılabilir; modern AGP için şart değil
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
