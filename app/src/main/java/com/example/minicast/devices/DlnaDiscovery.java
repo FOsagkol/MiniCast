@@ -5,6 +5,7 @@ import android.net.wifi.WifiManager;
 import android.util.Log;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.DatagramPacket;
@@ -17,6 +18,15 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * DLNA/UPnP SSDP keşfi + AVTransport (SetURI + Play).
+ * Philips gibi cihazlara uyum için:
+ * - MulticastLock
+ * - Geniş ST (MediaRenderer v1/2/3, AVTransport, upnp:rootdevice, ssdp:all)
+ * - URLBase/baseURL desteği (controlURL absolute çözümleme)
+ * - USN/UDN bazlı de-dupe
+ * - Sağlam HTTP/SOAP (Connection: close, error stream tüketimi)
+ */
 public class DlnaDiscovery {
 
     public interface Listener {
@@ -49,15 +59,23 @@ public class DlnaDiscovery {
                     lock.acquire();
                 }
 
-                String[] targets = new String[] {
+                // Daha geniş arama: bazı TV’ler sadece device/2 veya rootdevice yanıtlar
+                final String[] targets = new String[] {
                         "urn:schemas-upnp-org:device:MediaRenderer:1",
+                        "urn:schemas-upnp-org:device:MediaRenderer:2",
+                        "urn:schemas-upnp-org:device:MediaRenderer:3",
                         "urn:schemas-upnp-org:service:AVTransport:1",
+                        "upnp:rootdevice",
                         "ssdp:all"
                 };
 
-                Set<String> seen = new HashSet<>();
+                // Aynı cihaz/yanıtı tekrar eklememek için hem LOCATION hem USN takibi
+                Set<String> seenLocation = new HashSet<>();
+                Set<String> seenUsn = new HashSet<>();
+
                 try (DatagramSocket sock = new DatagramSocket()) {
                     sock.setReuseAddress(true);
+                    sock.setBroadcast(true);
                     sock.setSoTimeout(1500);
 
                     byte[] buf = new byte[8192];
@@ -65,7 +83,7 @@ public class DlnaDiscovery {
                     long end = System.currentTimeMillis() + 8_000;
                     int round = 0;
                     while (System.currentTimeMillis() < end) {
-                        // Her tur hedefleri yolla
+                        // İlk 3 turda M-SEARCH yayınla
                         if (round < 3) {
                             for (String st : targets) {
                                 byte[] req = msearch(st, 2).getBytes(StandardCharsets.UTF_8);
@@ -76,14 +94,18 @@ public class DlnaDiscovery {
                             round++;
                         }
 
-                        // Yanıtları topla (timeout’la döngü)
+                        // Cevapları topla
                         DatagramPacket resp = new DatagramPacket(buf, buf.length);
                         try {
                             sock.receive(resp);
                             String msg = new String(resp.getData(), 0, resp.getLength());
                             String location = headerValue(msg, "location");
+                            String usn = headerValue(msg, "usn");
+
                             if (location == null) continue;
-                            if (!seen.add(location)) continue;
+                            boolean firstTime = seenLocation.add(location);
+                            if (usn != null) firstTime = seenUsn.add(usn) || firstTime;
+                            if (!firstTime) continue;
 
                             try {
                                 URL locUrl = new URL(location);
@@ -102,13 +124,13 @@ public class DlnaDiscovery {
             } catch (Exception e) {
                 if (listener != null) listener.onError(e);
             } finally {
-                // lock release
                 try { if (lock != null && lock.isHeld()) lock.release(); } catch (Throwable ignore) {}
             }
         }).start();
     }
 
     private static String headerValue(String raw, String keyLower) {
+        if (raw == null) return null;
         String[] lines = raw.split("\r?\n");
         for (String line : lines) {
             int i = line.indexOf(':');
@@ -124,26 +146,37 @@ public class DlnaDiscovery {
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
         c.setConnectTimeout(3000);
         c.setReadTimeout(3000);
+        c.setRequestProperty("Connection", "close");
         try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
             StringBuilder sb = new StringBuilder();
             String ln;
             while ((ln = br.readLine()) != null) sb.append(ln).append('\n');
             return sb.toString();
         } finally {
+            try { c.getInputStream().close(); } catch (Throwable ignore) {}
             c.disconnect();
         }
     }
 
     /** Philips-dostu parse: AVTransport controlURL’ü esnek yakalar, absolute URL’e çevirir. */
     private static DlnaDevice parseDevice(String xml, URL locationUrl) {
+        if (xml == null) return null;
+
+        // FriendlyName
         String friendly = extract(xml, "<friendlyName>", "</friendlyName>");
         if (friendly == null) friendly = extract(xml, "<device:friendlyName>", "</device:friendlyName>");
         if (friendly == null || friendly.isEmpty()) friendly = "DLNA Cihazı";
 
+        // UDN
         String udn = extract(xml, "<UDN>", "</UDN>");
         if (udn == null) udn = extract(xml, "<device:UDN>", "</device:UDN>");
         if (udn == null || udn.isEmpty()) udn = locationUrl.toString();
 
+        // URLBase/baseURL (bazı cihazlar relative path’i buraya göre çözümler)
+        String base = extract(xml, "<URLBase>", "</URLBase>");
+        if (base == null) base = extract(xml, "<baseURL>", "</baseURL>");
+
+        // AVTransport controlURL bul
         String controlUrl = null;
         int idx = 0;
         while (true) {
@@ -164,19 +197,30 @@ public class DlnaDiscovery {
             idx = b + 10;
         }
         if (controlUrl == null) {
-            // Loose fallback
             controlUrl = findLooseControlUrlForAvTransport(xml);
         }
 
         URL abs = null;
         if (controlUrl != null && !controlUrl.isEmpty()) {
-            try { abs = new URL(locationUrl, controlUrl); } catch (Exception ignore) {}
+            try { abs = resolveUrl(locationUrl, base, controlUrl); } catch (Exception ignore) {}
         }
 
         Log.d(TAG, "Found device: " + friendly + " (" + udn + ")");
         Log.d(TAG, "AVTransport controlURL: " + (abs != null ? abs : "NONE"));
 
         return new DlnaDevice(udn, friendly, locationUrl, abs);
+    }
+
+    private static URL resolveUrl(URL locationUrl, String base, String control) throws Exception {
+        if (base != null && !base.trim().isEmpty()) {
+            try {
+                URL baseUrl = new URL(base.trim());
+                return new URL(baseUrl, control);
+            } catch (Exception ignore) {
+                // base hatalıysa locationUrl’e göre çöz
+            }
+        }
+        return new URL(locationUrl, control);
     }
 
     private static String findLooseControlUrlForAvTransport(String xml) {
@@ -253,10 +297,18 @@ public class DlnaDiscovery {
         c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "text/xml; charset=\"utf-8\"");
         c.setRequestProperty("SOAPAction", "\"" + action + "\"");
+        c.setRequestProperty("Connection", "close");
         try (OutputStream os = c.getOutputStream()) {
             os.write(body.getBytes(StandardCharsets.UTF_8));
         }
         int code = c.getResponseCode();
+        // Akışı mutlaka tüket (bazı cihazlar bağlantıyı açık tutar)
+        try (InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream()) {
+            if (is != null) {
+                byte[] tmp = new byte[256];
+                while (is.read(tmp) > 0) { /* discard */ }
+            }
+        } catch (Throwable ignore) {}
         c.disconnect();
         return code >= 200 && code < 300;
     }
