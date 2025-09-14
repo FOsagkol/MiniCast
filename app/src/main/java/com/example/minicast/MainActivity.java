@@ -2,6 +2,7 @@ package com.example.minicast;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -12,249 +13,298 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.*;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Toast;
+
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.minicast.cast.CastDiscovery;
-import com.example.minicast.devices.CastDeviceWrapper;
 import com.example.minicast.devices.DlnaDevice;
+import com.example.minicast.devices.DlnaDiscovery;
 import com.example.minicast.devices.TargetDevice;
-import com.example.minicast.dlna.DlnaDiscovery;
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.gms.cast.framework.SessionManager;
 import com.google.android.gms.cast.framework.media.RemoteMediaClient;
-import com.google.android.material.appbar.MaterialToolbar;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
-  private WebView web;
-  private EditText urlInput;
+    private WebView web;
+    private EditText urlInput;
+    private ExtendedFloatingActionButton fabTv;
 
-  // Cast
-  private SessionManager sessionManager;
+    // Cihaz listesi (Cast + DLNA tek yerde)
+    private final List<TargetDevice> foundDevices = new CopyOnWriteArrayList<>();
+    private final List<TargetDevice> deviceIndex = new ArrayList<>();
+    private ArrayAdapter<String> deviceAdapter;
+    private AlertDialog deviceDialog;
 
-  // DLNA
-  private WifiManager.MulticastLock mcLock;
+    // Cast
+    private SessionManager sessionManager;
 
-  // Discovery
-  private final List<TargetDevice> foundDevices = new CopyOnWriteArrayList<>();
-  private AlertDialog deviceDialog;
-  private ArrayAdapter<String> deviceAdapter;
-  private final List<TargetDevice> deviceIndex = new ArrayList<>();
+    // DLNA
+    private WifiManager wifiManager;
 
-  @Override protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_main);
+    // UI state
+    private enum UiState { IDLE, SEARCHING, READY, CONNECTED }
+    private UiState ui = UiState.IDLE;
 
-    MaterialToolbar toolbar = findViewById(R.id.toolbar);
-    setSupportActionBar(toolbar);
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
-    urlInput = findViewById(R.id.urlInput);
-    Button goBtn = findViewById(R.id.goBtn);
-    web = findViewById(R.id.web);
-    setupWebView();
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
 
-    goBtn.setOnClickListener(v -> {
-      String url = urlInput.getText().toString().trim();
-      if (!TextUtils.isEmpty(url)) {
-        if (!url.startsWith("http")) url = "https://" + url;
-        web.loadUrl(url);
-      }
-    });
+        urlInput = findViewById(R.id.urlInput);
+        Button goBtn = findViewById(R.id.goBtn);
+        web = findViewById(R.id.web);
+        setupWebView();
 
-    // Cast session
-    sessionManager = CastContext.getSharedInstance(this).getSessionManager();
-  }
-
-  @SuppressLint({"SetJavaScriptEnabled"})
-  private void setupWebView() {
-    WebSettings s = web.getSettings();
-    s.setJavaScriptEnabled(true);
-    s.setDomStorageEnabled(true);
-    s.setMediaPlaybackRequiresUserGesture(false);
-    s.setLoadWithOverviewMode(true);
-    s.setUseWideViewPort(true);
-    web.addJavascriptInterface(new JsBridge(), "MiniCast");
-    web.setWebChromeClient(new WebChromeClient());
-    web.setWebViewClient(new WebViewClient(){
-      @Override public void onPageFinished(WebView view, String url) { urlInput.setText(url); }
-    });
-    web.loadUrl("https://www.google.com");
-  }
-
-  @Override public boolean onCreateOptionsMenu(Menu menu) {
-    getMenuInflater().inflate(R.menu.main_menu, menu);
-    return true;
-  }
-
-  @Override public boolean onOptionsItemSelected(MenuItem item) {
-    if (item.getItemId() == R.id.action_connect_tv) {
-      openDevicePicker();
-      return true;
-    }
-    return super.onOptionsItemSelected(item);
-  }
-
-  /* -------- Birleşik cihaz seçici -------- */
-
-  private void openDevicePicker() {
-    foundDevices.clear();
-    deviceIndex.clear();
-
-    // Dialog
-    deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
-    AlertDialog.Builder b = new AlertDialog.Builder(this)
-        .setTitle("Cihazlar aranıyor…")
-        .setAdapter(deviceAdapter, (d, which) -> onDeviceChosen(deviceIndex.get(which)))
-        .setNegativeButton("Kapat", (d, w) -> stopDiscovery())
-        .setPositiveButton("Yeniden Tara", (d, w) -> {
-          stopDiscovery();
-          openDevicePicker();
+        goBtn.setOnClickListener(v -> {
+            String url = urlInput.getText().toString().trim();
+            if (!TextUtils.isEmpty(url)) {
+                if (!url.startsWith("http")) url = "https://" + url;
+                web.loadUrl(url);
+            }
         });
-    deviceDialog = b.show();
 
-    startDiscovery();
-  }
+        // FAB
+        fabTv = findViewById(R.id.fabTv);
+        setUi(UiState.IDLE);
+        fabTv.setOnClickListener(v -> openDevicePicker());
 
-  private void startDiscovery() {
-    // DLNA: multicast lock
-    acquireMulticastLock();
+        // Cast
+        sessionManager = CastContext.getSharedInstance(this).getSessionManager();
 
-    // Chromecast keşfi
-    CastDiscovery cast = new CastDiscovery(this, new CastDiscovery.Listener() {
-      @Override public void onDeviceFound(TargetDevice device) {
-        addDevice(device);
-      }
-      @Override public void onDone() { /* no-op */ }
-    });
-    cast.start();
+        // Wifi
+        wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+    }
 
-    // DLNA keşfi
-    DlnaDiscovery dlna = new DlnaDiscovery();
-    dlna.discoverAsync(new DlnaDiscovery.Listener() {
-      @Override public void onDeviceFound(TargetDevice device) { addDevice(device); }
-      @Override public void onDone() { /* no-op */ }
-    }, 5000);
+    @SuppressLint({"SetJavaScriptEnabled"})
+    private void setupWebView() {
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
 
-    // 6 sn sonra otomatik başlığı güncelle
-    web.postDelayed(() -> {
-      if (deviceDialog != null && deviceDialog.isShowing()) {
-        deviceDialog.setTitle(foundDevices.isEmpty() ? "Cihaz bulunamadı" : "Cihaz seçin");
-      }
-      // discovery stop; CastDiscovery için removeCallback gerekecek:
-      cast.stop();
-      releaseMulticastLock();
-    }, 6000);
-  }
+        web.addJavascriptInterface(new JsBridge(), "MiniCast");
+        web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                urlInput.setText(url);
+            }
+        });
 
-  private void stopDiscovery() {
-    releaseMulticastLock();
-    // CastDiscovery removeCallback startDiscovery içinde tutulmuyor; basitlik adına dialog kapanınca zaten discovery bitirildi.
-  }
+        web.loadUrl("https://www.google.com");
+    }
 
-  private void addDevice(TargetDevice d) {
-    // Aynı ID gelirse tekrarlama
-    for (TargetDevice x : foundDevices) if (x.getId().equals(d.getId())) return;
-    foundDevices.add(d);
-    deviceIndex.add(d);
-    runOnUiThread(() -> {
-      String label = d.getName(); // kullanıcıya protokol göstermiyoruz
-      deviceAdapter.add(label);
-      deviceAdapter.notifyDataSetChanged();
-    });
-  }
-
-  private void onDeviceChosen(TargetDevice device) {
-    // Önce sayfadaki video URL’ini alalım
-    injectAndGrabVideoSrc(device);
-  }
-
-  private void injectAndGrabVideoSrc(TargetDevice target) {
-    String js =
-        "javascript:(function(){try{"
-            + "var v=document.querySelector('video');"
-            + "if(!v){MiniCast.onVideoUrlFor('','" + target.getId() + "');return;}"
-            + "var src=v.currentSrc||v.src||'';"
-            + "if(!src&&v.querySelector('source'))src=v.querySelector('source').src;"
-            + "MiniCast.onVideoUrlFor(src||'','" + target.getId() + "');"
-            + "}catch(e){MiniCast.onVideoUrlFor('','" + target.getId() + "');}})();";
-    web.evaluateJavascript(js, null);
-  }
-
-  private class JsBridge {
-    @JavascriptInterface
-    public void onVideoUrlFor(String url, String targetId) {
-      runOnUiThread(() -> {
-        TargetDevice chosen = null;
-        for (TargetDevice d : foundDevices) if (d.getId().equals(targetId)) { chosen = d; break; }
-        if (chosen == null) { toast("Cihaz artık yok."); return; }
-
-        if (TextUtils.isEmpty(url) || url.startsWith("blob:")) {
-          toast("Bu video aktarılamıyor (DRM/blob).");
-          return;
+    /* ---------------- Toolbar menüsü (varsa) aynı aksiyonu tetikler ---------------- */
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main_menu, menu);
+        return true;
+    }
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_connect_tv) {
+            openDevicePicker();
+            return true;
         }
-        playOnDevice(chosen, url);
-      });
+        return super.onOptionsItemSelected(item);
     }
-  }
 
-  private void playOnDevice(TargetDevice device, String mediaUrl) {
-    switch (device.getType()) {
-      case CAST -> castUrl(mediaUrl);
-      case DLNA -> new Thread(() -> {
-        DlnaDevice d = (DlnaDevice) device;
-        boolean ok = DlnaDiscovery.setUriAndPlay(d.getControlUrl(), mediaUrl);
-        runOnUiThread(() -> toast(ok ? "TV’de oynatılıyor" : "DLNA oynatma başarısız"));
-      }).start();
+    /* -------------------------------- UI state ------------------------------------ */
+
+    private void setUi(UiState s) {
+        ui = s;
+        switch (s) {
+            case IDLE -> {
+                fabTv.setText("TV");
+                fabTv.setIconResource(android.R.drawable.ic_media_play);
+                fabTv.setClickable(true);
+                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_idle_bg)));
+                fabTv.setStrokeWidth(4);
+                fabTv.setStrokeColor(ColorStateList.valueOf(getColor(R.color.tv_idle_border)));
+                fabTv.setTextColor(getColor(R.color.tv_idle_text));
+            }
+            case SEARCHING -> {
+                fabTv.setText("Aranıyor…");
+                fabTv.setIconResource(android.R.drawable.ic_popup_sync);
+                fabTv.setStrokeWidth(0);
+                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_searching_bg)));
+                fabTv.setTextColor(getColor(R.color.tv_searching_text));
+            }
+            case READY -> {
+                fabTv.setText("Bağlan");
+                fabTv.setIconResource(android.R.drawable.ic_media_play);
+                fabTv.setStrokeWidth(0);
+                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
+                fabTv.setTextColor(getColor(R.color.tv_ready_text));
+            }
+            case CONNECTED -> {
+                fabTv.setText("Bağlı");
+                fabTv.setIconResource(android.R.drawable.presence_online);
+                fabTv.setStrokeWidth(0);
+                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_connected_bg)));
+                fabTv.setTextColor(getColor(R.color.tv_connected_text));
+            }
+        }
     }
-  }
 
-  private void castUrl(String url) {
-    CastSession session = sessionManager.getCurrentCastSession();
-    if (session == null || !session.isConnected()) {
-      toast("Önce Chromecast cihazına bağlanın (seçimde Cast cihazı yoksa DLNA seçin).");
-      return;
+    /* ------------------------------- Cihaz seçici ---------------------------------- */
+
+    private void openDevicePicker() {
+        foundDevices.clear();
+        deviceIndex.clear();
+
+        deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle("Cihazlar aranıyor…")
+                .setAdapter(deviceAdapter, (d, which) -> onDeviceChosen(deviceIndex.get(which)))
+                .setNegativeButton("Kapat", (d, w) -> { /* no-op */ })
+                .setPositiveButton("Yeniden Tara", (d, w) -> openDevicePicker());
+        deviceDialog = b.show();
+
+        setUi(UiState.SEARCHING);
+        startDiscovery();
+
+        // 10 sn sonra durumu güncelle
+        web.postDelayed(() -> {
+            if (deviceDialog != null && deviceDialog.isShowing()) {
+                deviceDialog.setTitle(foundDevices.isEmpty() ? "Cihaz bulunamadı" : "Cihaz seçin");
+            }
+            setUi(foundDevices.isEmpty() ? UiState.IDLE : UiState.READY);
+        }, 10_000);
     }
-    String contentType = guessContentType(url);
-    MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
-    md.putString(MediaMetadata.KEY_TITLE, "MiniCast");
-    MediaInfo mediaInfo = new MediaInfo.Builder(url)
-        .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-        .setContentType(contentType)
-        .setMetadata(md)
-        .build();
-    RemoteMediaClient client = session.getRemoteMediaClient();
-    if (client != null) client.load(mediaInfo, true, 0);
-  }
 
-  private String guessContentType(String url) {
-    String u = url.toLowerCase();
-    if (u.contains(".m3u8")) return "application/x-mpegURL";
-    if (u.contains(".mpd"))  return "application/dash+xml";
-    if (u.matches(".*\\.(mp4|m4v)(\\?.*)?$")) return "video/mp4";
-    if (u.matches(".*\\.(webm)(\\?.*)?$"))    return "video/webm";
-    return "video/mp4";
-  }
+    private void startDiscovery() {
+        // DLNA keşfi
+        DlnaDiscovery dlna = new DlnaDiscovery(wifiManager);
+        dlna.discoverAsync(new DlnaDiscovery.Listener() {
+            @Override public void onDeviceFound(TargetDevice device) { addDevice(device); }
+            @Override public void onDone() { /* no-op */ }
+        }, 8000);
 
-  /* ---- Multicast Lock ---- */
-  private void acquireMulticastLock() {
-    WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-    if (wm != null && (mcLock == null || !mcLock.isHeld())) {
-      mcLock = wm.createMulticastLock("minicast-ssdp");
-      mcLock.setReferenceCounted(true);
-      mcLock.acquire();
+        // Chromecast keşfi (Cast SDK route’larını MediaRouter tabanlı ayrı sınıfla yapıyorsanız, burada çağırın)
+        // NOT: Eğer kendi CastDiscovery sınıfınız varsa, paralel çağırın; sonuçlar addDevice() ile aynı listeye düşsün.
+        // Örn:
+        // CastDiscovery cast = new CastDiscovery(this, (TargetDevice d) -> addDevice(d));
+        // cast.start();  // dialog kapandığında cast.stop() çağırabilirsiniz.
     }
-  }
-  private void releaseMulticastLock() {
-    if (mcLock != null && mcLock.isHeld()) mcLock.release();
-  }
 
-  private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
+    private void addDevice(TargetDevice d) {
+        for (TargetDevice x : foundDevices) {
+            if (x.getId().equals(d.getId())) return;
+        }
+        foundDevices.add(d);
+        deviceIndex.add(d);
+        runOnUiThread(() -> {
+            deviceAdapter.add(d.getName()); // protokolü kullanıcıya göstermiyoruz
+            deviceAdapter.notifyDataSetChanged();
+        });
+    }
+
+    private void onDeviceChosen(TargetDevice device) {
+        // Seçilen cihaza uygun URL’yi sayfadan çek
+        injectAndGrabVideoSrc(device);
+    }
+
+    /* ------------------------------ Video URL çıkarımı ----------------------------- */
+
+    private void injectAndGrabVideoSrc(TargetDevice target) {
+        String js =
+                "javascript:(function(){try{"
+                        + "var v=document.querySelector('video');"
+                        + "if(!v){MiniCast.onVideoUrlFor('','" + target.getId() + "');return;}"
+                        + "var src=v.currentSrc||v.src||'';"
+                        + "if(!src&&v.querySelector('source'))src=v.querySelector('source').src;"
+                        + "MiniCast.onVideoUrlFor(src||'','" + target.getId() + "');"
+                        + "}catch(e){MiniCast.onVideoUrlFor('','" + target.getId() + "');}})();";
+        web.evaluateJavascript(js, null);
+    }
+
+    private class JsBridge {
+        @JavascriptInterface
+        public void onVideoUrlFor(String url, String targetId) {
+            runOnUiThread(() -> {
+                TargetDevice chosen = null;
+                for (TargetDevice d : foundDevices) {
+                    if (d.getId().equals(targetId)) { chosen = d; break; }
+                }
+                if (chosen == null) { toast("Cihaz artık yok."); return; }
+
+                if (TextUtils.isEmpty(url) || url.startsWith("blob:")) {
+                    toast("Bu video aktarılamıyor (DRM/blob).");
+                    return;
+                }
+                playOnDevice(chosen, url);
+            });
+        }
+    }
+
+    /* --------------------------------- Oynatma ------------------------------------- */
+
+    private void playOnDevice(TargetDevice device, String mediaUrl) {
+        switch (device.getType()) {
+            case CAST -> castUrl(mediaUrl);
+            case DLNA -> new Thread(() -> {
+                DlnaDevice d = (DlnaDevice) device;
+                boolean ok = DlnaDiscovery.setUriAndPlay(d.getControlUrl(), mediaUrl);
+                runOnUiThread(() -> {
+                    if (ok) {
+                        setUi(UiState.CONNECTED);
+                        toast("TV’de oynatılıyor");
+                    } else {
+                        toast("DLNA oynatma başarısız");
+                    }
+                });
+            }).start();
+        }
+    }
+
+    private void castUrl(String url) {
+        CastSession session = sessionManager.getCurrentCastSession();
+        if (session == null || !session.isConnected()) {
+            toast("Önce bir Cast cihazına bağlanın veya DLNA cihazı seçin.");
+            return;
+        }
+        String contentType = guessContentType(url);
+        MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
+        md.putString(MediaMetadata.KEY_TITLE, "MiniCast");
+        MediaInfo mediaInfo = new MediaInfo.Builder(url)
+                .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+                .setContentType(contentType)
+                .setMetadata(md)
+                .build();
+        RemoteMediaClient client = session.getRemoteMediaClient();
+        if (client != null) {
+            client.load(mediaInfo, true, 0);
+            setUi(UiState.CONNECTED);
+        }
+    }
+
+    private String guessContentType(String url) {
+        String u = url.toLowerCase();
+        if (u.contains(".m3u8")) return "application/x-mpegURL";
+        if (u.contains(".mpd"))  return "application/dash+xml";
+        if (u.matches(".*\\.(mp4|m4v)(\\?.*)?$")) return "video/mp4";
+        if (u.matches(".*\\.(webm)(\\?.*)?$"))    return "video/webm";
+        return "video/mp4";
+    }
+
+    private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
 }
