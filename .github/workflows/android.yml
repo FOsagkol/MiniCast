@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout
@@ -21,15 +24,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # SDK + araçlar
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          accept-android-sdk-licenses: true         # <-- BURASI
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
           cmdline-tools-version: 12266719
-          packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
+
+      # Kilitlenen noktayı biz üstleniyoruz
+      - name: Accept Android SDK licenses (non-interactive)
+        run: |
+          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="${ANDROID_SDK_ROOT}"
+
+      # Gerekli paketler (idempotent)
+      - name: Install required Android packages
+        run: |
+          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --sdk_root="${ANDROID_SDK_ROOT}" \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
