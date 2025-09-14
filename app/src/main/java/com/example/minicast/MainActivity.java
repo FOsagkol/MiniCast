@@ -413,4 +413,3 @@ public class MainActivity extends AppCompatActivity {
         if (u.contains(".mp4"))  return "video/mp4";
         return "video/*";
     }
-                            }
