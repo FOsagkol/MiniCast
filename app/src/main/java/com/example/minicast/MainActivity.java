@@ -1,8 +1,13 @@
 package com.example.minicast;
 
 import android.annotation.SuppressLint;
-import android.content.res.ColorStateList;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -30,6 +35,8 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final int REQ_LOC = 1001;
+
     private MaterialToolbar toolbar;
     private WebView web;
     private EditText urlInput;
@@ -39,6 +46,8 @@ public class MainActivity extends AppCompatActivity {
     private final List<DlnaDevice> dlnaDevices = new ArrayList<>();
     private ArrayAdapter<String> deviceAdapter;
     private AlertDialog deviceDialog;
+
+    private DlnaDevice pendingDevice;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,8 +72,10 @@ public class MainActivity extends AppCompatActivity {
 
         fabTv = findViewById(R.id.fabTv);
         if (fabTv != null) {
-            fabTv.setOnClickListener(v -> startDlnaDiscovery());
-            fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
+            fabTv.setOnClickListener(v -> startUnifiedDiscovery());
+            // Renkler projendeki values/colors.xml’den geliyor
+            fabTv.setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
             fabTv.setTextColor(getColor(R.color.tv_ready_text));
         }
     }
@@ -98,12 +109,63 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (item.getItemId() == R.id.action_connect_tv) {
-            startDlnaDiscovery();
+            startUnifiedDiscovery();
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
+    /** Tek tuş akışı: önce izin/konum kontrolü, sonra mevcut DLNA keşfi */
+    private void startUnifiedDiscovery() {
+        if (!ensureDiscoveryPermissionAndLocation()) return;
+        startDlnaDiscovery();
+        // İleride CastDiscovery eklersek buraya paralel olarak ekleriz.
+    }
+
+    /** Android 6+ için: Konum izni verildi mi ve servis açık mı? */
+    private boolean ensureDiscoveryPermissionAndLocation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOC);
+                Toast.makeText(this, "Cihazları bulmak için Konum izni gerekli", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+        }
+        // Konum servisi açık mı?
+        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        boolean enabled = false;
+        if (lm != null) {
+            try {
+                enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                        || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            } catch (Exception ignore) {}
+        }
+        if (!enabled) {
+            new AlertDialog.Builder(this)
+                    .setMessage("Cast/DLNA keşfi için ‘Konum’ açık olmalı. Ayarlar > Konum’u açalım mı?")
+                    .setPositiveButton("Aç", (d, w) ->
+                            startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                    .setNegativeButton("İptal", null)
+                    .show();
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] perms, @NonNull int[] grants) {
+        super.onRequestPermissionsResult(requestCode, perms, grants);
+        if (requestCode == REQ_LOC) {
+            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) {
+                startUnifiedDiscovery(); // izin verildi, tekrar dene
+            } else {
+                Toast.makeText(this, "Konum izni verilmeden cihazlar listelenemez", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    /** Mevcut DLNA keşif diyalogu (sendeki akış korunuyor) */
     private void startDlnaDiscovery() {
         dlnaDevices.clear();
 
@@ -124,7 +186,9 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
             @Override public void onError(Exception e) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this, "DLNA hata: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "DLNA hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
+                        Toast.LENGTH_LONG).show());
             }
             @Override public void onDone() {
                 runOnUiThread(() -> {
@@ -146,11 +210,9 @@ public class MainActivity extends AppCompatActivity {
                 + "}catch(e){MiniCast.onVideoSelected('');}})();";
         web.evaluateJavascript(js, null);
 
-        // URL geldikten sonra JsBridge.playOn(device, url) çağrılır
+        // URL geldikten sonra JsBridge içinde oynatma tetiklenecek
         pendingDevice = device;
     }
-
-    private DlnaDevice pendingDevice;
 
     private class JsBridge {
         @JavascriptInterface
