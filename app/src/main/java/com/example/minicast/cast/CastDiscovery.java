@@ -23,8 +23,10 @@ public class CastDiscovery {
   public CastDiscovery(Context ctx, Listener listener) {
     mediaRouter = MediaRouter.getInstance(ctx.getApplicationContext());
     selector = new MediaRouteSelector.Builder()
-        .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
-        .build();
+    .addControlCategory(
+        CastMediaControlIntent.categoryForCast("*") // tüm alıcılar
+    )
+    .build();
 
     callback = new MediaRouter.Callback() {
       @Override public void onRouteAdded(MediaRouter router, MediaRouter.RouteInfo route) {
