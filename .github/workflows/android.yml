@@ -24,15 +24,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Android SDK + cmdline-tools kurulumu
+      # Sadece SDK'yı kur; lisansları biz yöneteceğiz
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: true
+          accept-android-sdk-licenses: false
           cmdline-tools-version: 12266719
 
-      # İndirilen en yeni cmdline-tools klasörünü bul ve SDKMANAGER env olarak ayarla
+      # En yeni cmdline-tools sürümünü seç ve ENV'e yaz
       - name: Select newest sdkmanager
         run: |
           NEWEST_CTOOLS="$(ls -d ${ANDROID_SDK_ROOT}/cmdline-tools/* 2>/dev/null \
@@ -40,11 +39,11 @@ jobs:
           echo "Using cmdline-tools at: ${NEWEST_CTOOLS}"
           echo "SDKMANAGER=${NEWEST_CTOOLS}/bin/sdkmanager" >> $GITHUB_ENV
 
-      # Lisansları non-interactive kabul et (DOĞRU PATH ile)
+      # Lisansları non-interactive kabul et (interaktif promptu engeller)
       - name: Accept Android SDK licenses
         run: yes | "$SDKMANAGER" --licenses --sdk_root="${ANDROID_SDK_ROOT}"
 
-      # Gerekli paketleri indir (DOĞRU PATH ile)
+      # Gerekli paketleri aynı sdkmanager ile kur
       - name: Install required Android packages
         run: |
           "$SDKMANAGER" --sdk_root="${ANDROID_SDK_ROOT}" --install \
