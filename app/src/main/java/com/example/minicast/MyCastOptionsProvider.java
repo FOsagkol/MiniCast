@@ -1,4 +1,4 @@
-package com.example.minicast;  // adjust package name as needed
+package com.example.minicast;
 
 import android.content.Context;
 import com.google.android.gms.cast.framework.CastOptions;
@@ -11,7 +11,7 @@ public class MyCastOptionsProvider implements OptionsProvider {
 
     @Override
     public CastOptions getCastOptions(Context context) {
-        // Replace R.string.app_id with your receiver application ID (in strings.xml)
+        // R.string.app_id yerine, strings.xml içinde tanımlı uygulama ID değerini kullanın.
         return new CastOptions.Builder()
                 .setReceiverApplicationId(context.getString(R.string.app_id))
                 .build();
@@ -19,9 +19,7 @@ public class MyCastOptionsProvider implements OptionsProvider {
 
     @Override
     public List<SessionProvider> getAdditionalSessionProviders(Context context) {
-        // Return null if not using additional session providers
+        // Ek oturum sağlayıcısı kullanılmıyorsa null dönülür
         return null;
-    }
-}        return null;
     }
 }
