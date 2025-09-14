@@ -16,10 +16,7 @@ import java.net.URL;
 import java.util.*;
 
 /**
- * DLNA/UPnP keşfi (SSDP) + basit AVTransport kontrolü.
- * - Birden çok ST ile 3 tur M-SEARCH gönderir.
- * - NOTIFY ssdp:alive multicast mesajlarını da dinler.
- * - MulticastLock'u içeride yönetir.
+ * DLNA/UPnP keşfi (SSDP) + AVTransport kontrolü
  */
 public class DlnaDiscovery {
 
@@ -42,13 +39,10 @@ public class DlnaDiscovery {
 
     public void cancel() { running = false; }
 
-    /** timeoutMs: ~8000ms önerilir */
     public void discoverAsync(Listener listener, int timeoutMs) {
         new Thread(() -> {
             running = true;
-            try {
-                mlock.acquire();
-            } catch (Throwable ignore) {}
+            try { mlock.acquire(); } catch (Throwable ignore) {}
 
             MulticastSocket mcast = null;
             try {
@@ -60,16 +54,13 @@ public class DlnaDiscovery {
                         "ssdp:all"
                 );
 
-                // NOTIFY ve yanıtlar için multicast socket
                 InetAddress group = InetAddress.getByName(SSDP_ADDR);
                 mcast = new MulticastSocket(SSDP_PORT);
                 mcast.setReuseAddress(true);
-                // Android'de basit joinGroup(InetAddress) genelde yeterli
                 mcast.joinGroup(group);
                 mcast.setSoTimeout(1000);
                 try { mcast.setTimeToLive(2); } catch (Throwable ignore) {}
 
-                // 3 tur M-SEARCH gönder + gelenleri topla
                 for (int round = 0; round < 3 && running && System.currentTimeMillis() < end; round++) {
                     for (String st : targets) {
                         if (!running) break;
@@ -77,8 +68,6 @@ public class DlnaDiscovery {
                     }
                     collectSsdp(mcast, listener, seenLocations, end);
                 }
-
-                // Kalan sürede son dinleme
                 collectSsdp(mcast, listener, seenLocations, end);
 
             } catch (Exception e) {
@@ -95,8 +84,6 @@ public class DlnaDiscovery {
         }).start();
     }
 
-    /* ---------- SSDP yardımcıları ---------- */
-
     private void sendMSearch(String st, int mx) throws Exception {
         String req =
                 "M-SEARCH * HTTP/1.1\r\n" +
@@ -108,7 +95,6 @@ public class DlnaDiscovery {
         DatagramSocket socket = new DatagramSocket();
         socket.setReuseAddress(true);
         socket.setSoTimeout(1000);
-        try { socket.setTrafficClass(0x10); } catch (Throwable ignore) {} // low delay hint
         DatagramPacket packet = new DatagramPacket(
                 req.getBytes(),
                 req.length(),
@@ -128,14 +114,11 @@ public class DlnaDiscovery {
                 String msg = new String(resp.getData(), 0, resp.getLength());
 
                 Map<String,String> h = parseHeaders(msg);
-                // NOTIFY ise NTS: ssdp:alive olmalı; M-SEARCH yanıtlarında NTS genelde yoktur
                 String nts = h.get("nts");
-                if (nts != null && !"ssdp:alive".equalsIgnoreCase(nts)) {
-                    continue; // byebye vb. atla
-                }
+                if (nts != null && !"ssdp:alive".equalsIgnoreCase(nts)) continue;
                 String location = h.get("location");
                 if (location == null) continue;
-                if (!seen.add(location)) continue; // dupe
+                if (!seen.add(location)) continue;
 
                 try {
                     URL locUrl = new URL(location);
@@ -147,7 +130,7 @@ public class DlnaDiscovery {
                 }
 
             } catch (SocketTimeoutException ignore) {
-                break; // bu tur bitti
+                break;
             } catch (Exception e) {
                 Log.w(TAG, "multicast receive error: " + e.getMessage());
                 break;
@@ -183,42 +166,48 @@ public class DlnaDiscovery {
         }
     }
 
-    /* --- Çok hafif XML çıkarımı (stabil) --- */
+    /** ---- Philips uyumlu parseDevice ---- */
     private DlnaDevice parseDevice(String xml, URL locationUrl) {
         try {
-            // friendlyName
             String friendly = extract(xml, "<friendlyName>", "</friendlyName>");
+            if (friendly == null) friendly = extract(xml, "<device:friendlyName>", "</device:friendlyName>");
             if (friendly == null || friendly.isEmpty()) friendly = "DLNA Cihazı";
 
-            // UDN (ID için)
             String udn = extract(xml, "<UDN>", "</UDN>");
+            if (udn == null) udn = extract(xml, "<device:UDN>", "</device:UDN>");
             if (udn == null || udn.isEmpty()) udn = locationUrl.toString();
 
-            // AVTransport controlURL
             String controlUrl = null;
             int idx = 0;
             while (true) {
-                int svcStart = xml.indexOf("<service>", idx);
+                int svcStart = xml.indexOf("<service", idx);
                 if (svcStart < 0) break;
                 int svcEnd = xml.indexOf("</service>", svcStart);
                 if (svcEnd < 0) break;
                 String svc = xml.substring(svcStart, svcEnd);
                 String type = extract(svc, "<serviceType>", "</serviceType>");
-                if (type != null && type.contains("AVTransport")) {
-                    controlUrl = extract(svc, "<controlURL>", "</controlURL>");
+                if (type == null) type = extract(svc, "<service:serviceType>", "</service:serviceType>");
+                String cUrl = extract(svc, "<controlURL>", "</controlURL>");
+                if (cUrl == null) cUrl = extract(svc, "<service:controlURL>", "</service:controlURL>");
+
+                if (type != null && type.toLowerCase(Locale.US).contains("avtransport")) {
+                    controlUrl = (cUrl != null) ? cUrl.trim() : null;
                     break;
                 }
-                idx = svcEnd + 9;
+                idx = svcEnd + 10;
+            }
+
+            if (controlUrl == null) {
+                controlUrl = findLooseControlUrlForAvTransport(xml);
             }
 
             URL controlAbs = null;
             if (controlUrl != null && !controlUrl.isEmpty()) {
-                try {
-                    controlAbs = new URL(locationUrl, controlUrl);
-                } catch (Exception ignore) {
-                    controlAbs = null;
-                }
+                try { controlAbs = new URL(locationUrl, controlUrl.trim()); } catch (Exception ignore) {}
             }
+
+            Log.d(TAG, "Found device: " + friendly + " (" + udn + ")");
+            Log.d(TAG, "AVTransport controlURL: " + (controlAbs != null ? controlAbs : "NONE"));
 
             return new DlnaDevice(udn, friendly, locationUrl, controlAbs);
 
@@ -236,13 +225,27 @@ public class DlnaDiscovery {
         return xml.substring(i + a.length(), j).trim();
     }
 
-    /* ---------- AVTransport: SetURI + Play ---------- */
+    private String findLooseControlUrlForAvTransport(String xml) {
+        int pos = 0;
+        while (true) {
+            int svcStart = xml.indexOf("<service", pos);
+            if (svcStart < 0) break;
+            int svcEnd = xml.indexOf("</service>", svcStart);
+            if (svcEnd < 0) break;
+            String svc = xml.substring(svcStart, svcEnd);
+            if (svc.toLowerCase(Locale.US).contains("avtransport")) {
+                String cUrl = extract(svc, "<controlURL>", "</controlURL>");
+                if (cUrl == null) cUrl = extract(svc, "<service:controlURL>", "</service:controlURL>");
+                if (cUrl != null && !cUrl.trim().isEmpty()) return cUrl.trim();
+            }
+            pos = svcEnd + 10;
+        }
+        return null;
+    }
 
-    /** controlUrl absolute olmalı (parseDevice bunu yapıyor). */
     public static boolean setUriAndPlay(URL controlUrl, String mediaUrl) {
         if (controlUrl == null || mediaUrl == null || mediaUrl.isEmpty()) return false;
         try {
-            // 1) SetAVTransportURI
             String setBody =
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                   + "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
@@ -258,7 +261,6 @@ public class DlnaDiscovery {
             if (!soapPost(controlUrl, "urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI", setBody))
                 return false;
 
-            // 2) Play
             String playBody =
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                   + "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
@@ -301,4 +303,4 @@ public class DlnaDiscovery {
                 .replace("\"","&quot;")
                 .replace("'","&apos;");
     }
-          }
+            }
