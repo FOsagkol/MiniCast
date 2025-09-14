@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Android SDK (cmdline-tools) kurulumu ve lisansların kabulü
+      # Android SDK (cmdline-tools) + lisans
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -44,19 +44,34 @@ jobs:
             "platforms;android-34" \
             "build-tools;34.0.0"
 
+      # (Teşhis) Menü dosyalarını ve res/menu ağacını göster
+      - name: List menu XML files (diagnostic)
+        run: |
+          echo "Listing files matching menu*.xml under res:"
+          find app/src/main/res -type f -name "menu*.xml" -print || true
+          echo "Res/menu tree (if exists):"
+          (ls -la app/src/main/res/menu || true)
+
+      # (Opsiyonel bir kerelik) Gradle cache temizliği
+      - name: Clear Gradle caches (one-off)
+        run: rm -rf $HOME/.gradle/caches
+
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # Gradle cache
+      # Gradle cache (temiz başlat + cleanup)
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+          gradle-home-cache-cleanup: true
 
-      # Derleme (detaylı log için --stacktrace --info)
+      # Derleme (detaylı log)
       - name: Build debug APK
-        run: ./gradlew --no-daemon clean assembleDebug --stacktrace --info
+        run: ./gradlew --no-daemon clean assembleDebug --stacktrace --info --warning-mode all
 
       # Artefakt yükleme
       - name: Upload APK
