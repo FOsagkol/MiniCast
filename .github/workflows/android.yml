@@ -64,11 +64,11 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # 7) Gradle cache (read-only yaparak cache servisindeki geçici uyarıları azaltıyoruz)
-      - name: Setup Gradle cache
+     # 7) Gradle setup (cache kapalı: uyarı yok, log temiz)
+      - name: Setup Gradle (no cache)
         uses: gradle/actions/setup-gradle@v3
         with:
-          cache-read-only: true
+         cache-disabled: true
 
       # 8) Derleme (ayrıntılı log)
       - name: Build debug APK
