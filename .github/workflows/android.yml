@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # SDK + araçlar
+      # Android SDK (cmdline-tools) kurulumu ve lisansların kabulü
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -32,16 +32,17 @@ jobs:
           log-accepted-android-sdk-licenses: true
           cmdline-tools-version: 12266719
 
-      # Kilitlenen noktayı biz üstleniyoruz
       - name: Accept Android SDK licenses (non-interactive)
         run: |
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses --sdk_root="${ANDROID_SDK_ROOT}"
 
-      # Gerekli paketler (idempotent)
+      # Gerekli paketler (compileSdk/targetSdk 34 için)
       - name: Install required Android packages
         run: |
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --sdk_root="${ANDROID_SDK_ROOT}" \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
@@ -49,9 +50,15 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
-        run: ./gradlew --no-daemon clean assembleDebug
+      # Gradle cache
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
 
+      # Derleme (detaylı log için --stacktrace --info)
+      - name: Build debug APK
+        run: ./gradlew --no-daemon clean assembleDebug --stacktrace --info
+
+      # Artefakt yükleme
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
