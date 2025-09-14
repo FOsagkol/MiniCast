@@ -1,5 +1,7 @@
 package com.example.minicast;
 
+import com.example.minicast.devices.DlnaDevice;
+import com.example.minicast.devices.DlnaDiscovery;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
