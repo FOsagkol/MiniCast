@@ -27,8 +27,6 @@ import androidx.mediarouter.media.MediaRouteSelector;
 import androidx.mediarouter.media.MediaRouter;
 import androidx.mediarouter.media.MediaRouter.RouteInfo;
 
-import com.example.minicast.devices.DlnaDevice;
-import com.example.minicast.devices.DlnaDiscovery;
 import com.example.minicast.devices.TargetDevice;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
