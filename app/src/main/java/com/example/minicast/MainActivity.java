@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -20,28 +21,37 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.mediarouter.media.MediaRouteSelector;
+import androidx.mediarouter.media.MediaRouter;
+import androidx.mediarouter.media.MediaRouter.RouteInfo;
 
 import com.example.minicast.devices.DlnaDevice;
 import com.example.minicast.devices.DlnaDiscovery;
 import com.example.minicast.devices.TargetDevice;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.gms.cast.framework.SessionManager;
 import com.google.android.gms.cast.framework.media.RemoteMediaClient;
+import com.google.android.gms.cast.CastMediaControlIntent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MainActivity extends AppCompatActivity {
 
     private WebView web;
     private EditText urlInput;
-    private ExtendedFloatingActionButton fabTv;
+
+    // FAB: hem Extended hem normal FAB ile uyumlu çalışalım
+    private ExtendedFloatingActionButton eFab;
+    private FloatingActionButton sFab;
 
     // Tek listede Cast + DLNA cihazları
     private final List<TargetDevice> foundDevices = new CopyOnWriteArrayList<>();
@@ -51,6 +61,18 @@ public class MainActivity extends AppCompatActivity {
 
     // Cast
     private SessionManager sessionManager;
+    private MediaRouter mediaRouter;
+    private MediaRouteSelector castSelector;
+    private boolean castScanning = false;
+    private final MediaRouter.Callback castCallback = new MediaRouter.Callback() {
+        @Override public void onRouteAdded(MediaRouter router, RouteInfo route) {
+            if (!castScanning) return;
+            addDevice(new CastDeviceWrapper(route.getId(), safe(route.getName())));
+        }
+        @Override public void onRouteChanged(MediaRouter router, RouteInfo route) {
+            // no-op
+        }
+    };
 
     // DLNA
     private WifiManager wifiManager;
@@ -80,13 +102,23 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // FAB
-        fabTv = findViewById(R.id.fabTv);
+        // FAB referansları (hangisi varsa onu kullan)
+        View fab = findViewById(R.id.fabTv);
+        if (fab instanceof ExtendedFloatingActionButton) {
+            eFab = (ExtendedFloatingActionButton) fab;
+        } else if (fab instanceof FloatingActionButton) {
+            sFab = (FloatingActionButton) fab;
+        }
         setUi(UiState.IDLE);
-        fabTv.setOnClickListener(v -> openDevicePicker());
+        if (eFab != null) eFab.setOnClickListener(v -> openDevicePicker());
+        if (sFab != null) sFab.setOnClickListener(v -> openDevicePicker());
 
         // Cast
         sessionManager = CastContext.getSharedInstance(this).getSessionManager();
+        mediaRouter = MediaRouter.getInstance(getApplicationContext());
+        castSelector = new MediaRouteSelector.Builder()
+                .addControlCategory(CastMediaControlIntent.categoryForCast("*")) // tüm alıcılar
+                .build();
 
         // Wifi
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -131,36 +163,63 @@ public class MainActivity extends AppCompatActivity {
 
     private void setUi(UiState s) {
         ui = s;
-        switch (s) {
-            case IDLE -> {
-                fabTv.setText("TV");
-                fabTv.setIconResource(android.R.drawable.ic_media_play);
-                fabTv.setClickable(true);
-                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_idle_bg)));
-                fabTv.setStrokeWidth(4);
-                fabTv.setStrokeColor(ColorStateList.valueOf(getColor(R.color.tv_idle_border)));
-                fabTv.setTextColor(getColor(R.color.tv_idle_text));
+        // Extended FAB varsa yazı/çerçeve ile zengin, yoksa normal FAB'de sadece renk/ikon
+        if (eFab != null) {
+            switch (s) {
+                case IDLE -> {
+                    eFab.setText("TV");
+                    eFab.setIconResource(android.R.drawable.ic_media_play);
+                    eFab.setClickable(true);
+                    eFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_idle_bg)));
+                    eFab.setStrokeWidth(4);
+                    eFab.setStrokeColor(ColorStateList.valueOf(getColor(R.color.tv_idle_border)));
+                    eFab.setTextColor(getColor(R.color.tv_idle_text));
+                }
+                case SEARCHING -> {
+                    eFab.setText("Aranıyor…");
+                    eFab.setIconResource(android.R.drawable.ic_popup_sync);
+                    eFab.setStrokeWidth(0);
+                    eFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_searching_bg)));
+                    eFab.setTextColor(getColor(R.color.tv_searching_text));
+                }
+                case READY -> {
+                    eFab.setText("Bağlan");
+                    eFab.setIconResource(android.R.drawable.ic_media_play);
+                    eFab.setStrokeWidth(0);
+                    eFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
+                    eFab.setTextColor(getColor(R.color.tv_ready_text));
+                }
+                case CONNECTED -> {
+                    eFab.setText("Bağlı");
+                    eFab.setIconResource(android.R.drawable.presence_online);
+                    eFab.setStrokeWidth(0);
+                    eFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_connected_bg)));
+                    eFab.setTextColor(getColor(R.color.tv_connected_text));
+                }
             }
-            case SEARCHING -> {
-                fabTv.setText("Aranıyor…");
-                fabTv.setIconResource(android.R.drawable.ic_popup_sync);
-                fabTv.setStrokeWidth(0);
-                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_searching_bg)));
-                fabTv.setTextColor(getColor(R.color.tv_searching_text));
-            }
-            case READY -> {
-                fabTv.setText("Bağlan");
-                fabTv.setIconResource(android.R.drawable.ic_media_play);
-                fabTv.setStrokeWidth(0);
-                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
-                fabTv.setTextColor(getColor(R.color.tv_ready_text));
-            }
-            case CONNECTED -> {
-                fabTv.setText("Bağlı");
-                fabTv.setIconResource(android.R.drawable.presence_online);
-                fabTv.setStrokeWidth(0);
-                fabTv.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_connected_bg)));
-                fabTv.setTextColor(getColor(R.color.tv_connected_text));
+        } else if (sFab != null) {
+            // Normal FAB için sade renk geçişleri
+            switch (s) {
+                case IDLE -> {
+                    sFab.setImageResource(android.R.drawable.ic_media_play);
+                    sFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_idle_bg)));
+                    sFab.setImageTintList(ColorStateList.valueOf(getColor(R.color.tv_idle_border)));
+                }
+                case SEARCHING -> {
+                    sFab.setImageResource(android.R.drawable.ic_popup_sync);
+                    sFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_searching_bg)));
+                    sFab.setImageTintList(ColorStateList.valueOf(getColor(R.color.tv_searching_text)));
+                }
+                case READY -> {
+                    sFab.setImageResource(android.R.drawable.ic_media_play);
+                    sFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
+                    sFab.setImageTintList(ColorStateList.valueOf(getColor(R.color.tv_ready_text)));
+                }
+                case CONNECTED -> {
+                    sFab.setImageResource(android.R.drawable.presence_online);
+                    sFab.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.tv_connected_bg)));
+                    sFab.setImageTintList(ColorStateList.valueOf(getColor(R.color.tv_connected_text)));
+                }
             }
         }
     }
@@ -192,21 +251,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startDiscovery() {
-        // DLNA keşfi (MulticastLock'u içeride yönetiyor)
+        // DLNA keşfi
         DlnaDiscovery dlna = new DlnaDiscovery(wifiManager);
         dlna.discoverAsync(new DlnaDiscovery.Listener() {
             @Override public void onDeviceFound(TargetDevice device) { addDevice(device); }
             @Override public void onDone() { /* no-op */ }
         }, 8000);
 
-        // Chromecast keşfi: Kendi CastDiscovery sınıfınızı kullanıyorsanız paralel başlatın ve addDevice(...) ile aynı listeye ekleyin.
-        // Örn:
-        // CastDiscovery cast = new CastDiscovery(this, new CastDiscovery.Listener() {
-        //     @Override public void onDeviceFound(TargetDevice device) { addDevice(device); }
-        //     @Override public void onDone() { /* no-op */ }
-        // });
-        // cast.start();
-        // Not: Dialog kapanırken cast.stop() çağırabilirsiniz.
+        // CAST keşfi (aynı listeye)
+        castScanning = true;
+        mediaRouter.addCallback(castSelector, castCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY);
+
+        // Dialog kapanınca Cast keşfini durdur
+        if (deviceDialog != null) {
+            deviceDialog.setOnDismissListener(d -> stopCastDiscovery());
+        }
+    }
+
+    private void stopCastDiscovery() {
+        if (castScanning) {
+            castScanning = false;
+            try { mediaRouter.removeCallback(castCallback); } catch (Throwable ignore) {}
+        }
     }
 
     private void addDevice(TargetDevice d) {
@@ -301,7 +367,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String guessContentType(String url) {
-        String u = url.toLowerCase();
+        String u = url.toLowerCase(Locale.US);
         if (u.contains(".m3u8")) return "application/x-mpegURL";
         if (u.contains(".mpd"))  return "application/dash+xml";
         if (u.matches(".*\\.(mp4|m4v)(\\?.*)?$")) return "video/mp4";
@@ -310,4 +376,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
-            }
+
+    /* ----------------------------- Yardımcı sınıf ---------------------------------- */
+    // Basit Cast sarmalayıcı (ayrı dosya gerektirmesin diye burada)
+    private static class CastDeviceWrapper implements TargetDevice {
+        private final String id;
+        private final String name;
+        CastDeviceWrapper(String id, String name) { this.id = id; this.name = name; }
+        @Override public String getId() { return id; }
+        @Override public String getName() { return name; }
+        @Override public DeviceType getType() { return DeviceType.CAST; }
+    }
+
+    private static String safe(CharSequence cs) { return cs == null ? "Cast Cihazı" : cs.toString(); }
+    }
