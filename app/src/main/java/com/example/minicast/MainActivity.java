@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Cast Framework'ü erkenden ayağa kaldır (session callback'leri için iyi olur)
+        // Cast Framework'ü erkenden ayağa kaldır (session callback'leri için)
         try { CastContext.getSharedInstance(this); } catch (Throwable ignore) {}
 
         fabTv = findViewById(R.id.fabTv);
@@ -160,6 +160,7 @@ public class MainActivity extends AppCompatActivity {
                 .setAdapter(deviceAdapter, (d, which) -> onDeviceChosen(foundDevices.get(which)))
                 .setNegativeButton("Kapat", (d, w) -> stopCastDiscovery())
                 .create();
+        deviceDialog.setOnDismissListener(d -> stopCastDiscovery()); // güvenli durdurma
         deviceDialog.show();
 
         // DLNA keşfini başlat
@@ -244,13 +245,27 @@ public class MainActivity extends AppCompatActivity {
     /* --------------------- CHROMECAST KEŞFİ -------------------- */
 
     private void startCastScan() {
-        castDiscovery = new CastDiscovery(this, device -> {
-            // device -> TargetDevice (CastDeviceWrapper)
-            if (device instanceof CastDeviceWrapper) {
-                CastDeviceWrapper cdw = (CastDeviceWrapper) device;
-                String key = "CAST:" + cdw.getId();
-                String name = cdw.getName();
-                runOnUiThread(() -> addDeviceIfNew(key, name, cdw));
+        castDiscovery = new CastDiscovery(this, new CastDiscovery.Listener() {
+            @Override public void onDeviceFound(TargetDevice device) {
+                if (device instanceof CastDeviceWrapper) {
+                    CastDeviceWrapper cdw = (CastDeviceWrapper) device;
+                    String key = "CAST:" + cdw.getId();
+                    String name = cdw.getName();
+                    runOnUiThread(() -> addDeviceIfNew(key, name, cdw));
+                }
+            }
+
+            @Override public void onDone() {
+                runOnUiThread(() -> {
+                    castDone = true;
+                    updateDialogTitle();
+                });
+            }
+
+            @Override public void onError(Exception e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Cast keşif hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
+                        Toast.LENGTH_LONG).show());
             }
         });
         castDiscovery.start();
@@ -398,4 +413,4 @@ public class MainActivity extends AppCompatActivity {
         if (u.contains(".mp4"))  return "video/mp4";
         return "video/*";
     }
-}
+                            }
