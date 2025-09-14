@@ -6,5 +6,6 @@
         android:id="@+id/action_connect_tv"
         android:title="TV'ye bağlan"
         android:icon="@android:drawable/stat_sys_data_bluetooth"
-        app:showAsAction="always" />
-</menu>
+        app:showAsAction="always"/>
+          
+</menu/>
