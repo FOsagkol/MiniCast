@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.minicast">
 
+    <!-- İnternet izni: Video akışları için gereklidir7 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -19,11 +22,13 @@
             </intent-filter>
         </activity>
 
-        <!-- Google Cast framework metadata -->
+        <!-- Expanded Controls Activity (Cast kontrol ekranı) -->
+        <activity
+            android:name=".ExpandedControlsActivity"
+            android:exported="true" />
+
+        <!-- Cast SDK OptionsProvider meta verisi (sadece bir kere eklenir) -->
         <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.example.minicast.MyCastOptionsProvider" />
-         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.example.minicast.MyCastOptionsProvider" />
     </application>
