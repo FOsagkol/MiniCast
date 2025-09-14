@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
       xmlns:app="http://schemas.android.com/apk/res-auto">
-  <item
-      android:id="@+id/action_connect_tv"
-      android:title="TV'ye Bağlan"
-      android:icon="@android:drawable/stat_sys_data_bluetooth"  <!-- ikon: örnek; isterseniz cast vektörü ekleriz -->
-      app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_connect_tv"
+        android:title="TV'ye bağlan"
+        android:icon="@android:drawable/stat_sys_data_bluetooth"
+        app:showAsAction="always" />
 </menu>
