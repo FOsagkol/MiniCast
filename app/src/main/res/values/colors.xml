@@ -1,22 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand Colors -->
-    <color name="brand_orange">#FF9800</color>
-    <color name="brand_orange_dark">#E65100</color>
-    <color name="brand_white">#FFFFFF</color>
+
+    <!-- Marka renkleri -->
+    <color name="brand_orange">#FF6A00</color>
     <color name="brand_black">#000000</color>
-    <color name="brand_grey">#333333</color>
+    <color name="brand_white">#FFFFFF</color>
 
-    <!-- UI States -->
-    <color name="tv_idle_border">#FF9800</color>       <!-- turuncu -->
-    <color name="tv_idle_bg">#FFFFFF</color>           <!-- beyaz -->
-    <color name="tv_idle_text">#000000</color>         <!-- siyah -->
+    <!-- Adaptive icon için zorunlu -->
+    <color name="ic_launcher_background">#FF6A00</color>
 
-    <color name="tv_searching_bg">#FF9800</color>      <!-- turuncu -->
-    <color name="tv_searching_text">#FFFFFF</color>    <!-- beyaz -->
+    <!-- FAB durum renkleri -->
+    <color name="tv_idle_bg">#FFFFFFFF</color>
+    <color name="tv_idle_border">#FF6A00</color>
+    <color name="tv_idle_text">#FF6A00</color>
 
-    <color name="tv_ready_bg">#000000</color>          <!-- siyah -->
-    <color name="tv_ready_text">#FF9800</color>        <!-- turuncu -->
+    <color name="tv_searching_bg">#FFFFCC80</color>
+    <color name="tv_searching_text">#FF000000</color>
 
-    <color name="tv_connected_bg">#E65100</color>      <!-- koyu turuncu -->
-    <color name="tv_connected_text">#FFFFFF</color>    <!-- beyaz -->
+    <color name="tv_ready_bg">#FF6A00</color>
+    <color name="tv_ready_text">#FFFFFFFF</color>
+
+    <color name="tv_connected_bg">#FF000000</color>
+    <color name="tv_connected_text">#FFFFFFFF</color>
+
 </resources>
