@@ -1,12 +1,8 @@
 plugins {
-  // Ortak eklenti sürümleri burada tutulur (çok modüllü projelerde paylaşım için idealdir)
   id 'com.android.application' version '8.6.1' apply false
 }
 
-/**
- * Kalite-yaşam: 'gradlew clean' çağrılarında kök build klasörünü temizler.
- * Modül(ler) tarafında zaten kendi build/ klasörleri temizlenir.
- */
+/** root build klasörünü temizle */
 tasks.register('clean', Delete) {
   delete rootProject.layout.buildDirectory
 }
