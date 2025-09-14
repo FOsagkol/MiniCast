@@ -15,66 +15,56 @@ jobs:
       ANDROID_HOME: /usr/local/lib/android/sdk
 
     steps:
-      # 1) Kaynak kodu al
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) JDK 17 (AGP 8.x + Gradle 8.7 için)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3) Android SDK cmdline-tools (lisans kabulünü burada kapatıyoruz!)
+      # Android SDK + cmdline-tools kurulumu
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          accept-android-sdk-licenses: false
-          log-accepted-android-sdk-licenses: false
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
           cmdline-tools-version: 12266719
-          packages: tools platform-tools
 
-      # 4) Lisansları non-interactive kabul et
-      - name: Accept Android SDK licenses (non-interactive)
+      # İndirilen en yeni cmdline-tools klasörünü bul ve SDKMANAGER env olarak ayarla
+      - name: Select newest sdkmanager
         run: |
-          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
-            --licenses --sdk_root="${ANDROID_SDK_ROOT}"
+          NEWEST_CTOOLS="$(ls -d ${ANDROID_SDK_ROOT}/cmdline-tools/* 2>/dev/null \
+            | grep -E '/[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          echo "Using cmdline-tools at: ${NEWEST_CTOOLS}"
+          echo "SDKMANAGER=${NEWEST_CTOOLS}/bin/sdkmanager" >> $GITHUB_ENV
 
-      # 5) Gerekli paketleri kur (compile/target 34 ile uyumlu)
+      # Lisansları non-interactive kabul et (DOĞRU PATH ile)
+      - name: Accept Android SDK licenses
+        run: yes | "$SDKMANAGER" --licenses --sdk_root="${ANDROID_SDK_ROOT}"
+
+      # Gerekli paketleri indir (DOĞRU PATH ile)
       - name: Install required Android packages
         run: |
-          "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --sdk_root="${ANDROID_SDK_ROOT}" \
+          "$SDKMANAGER" --sdk_root="${ANDROID_SDK_ROOT}" --install \
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;34.0.0"
+          "$SDKMANAGER" --sdk_root="${ANDROID_SDK_ROOT}" --update
 
-      # (Opsiyonel teşhis - bırakmak isterseniz dursun)
-      - name: List menu XML files (diagnostic)
-        run: |
-          echo "Listing files matching menu*.xml under res:"
-          find app/src/main/res -type f -name "menu*.xml" -print || true
-          echo "Res/menu tree (if exists):"
-          (ls -la app/src/main/res/menu || true)
-
-      # 6) Gradle wrapper doğrulama + çalıştırılabilir yap
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-     # 7) Gradle setup (cache kapalı: uyarı yok, log temiz)
-      - name: Setup Gradle (no cache)
-        uses: gradle/actions/setup-gradle@v3
-        with:
-         cache-disabled: true
-
-      # 8) Derleme (ayrıntılı log)
       - name: Build debug APK
-        run: ./gradlew --no-daemon clean assembleDebug --stacktrace --info --warning-mode all
+        run: ./gradlew --no-daemon clean assembleDebug --stacktrace --info
 
-      # 9) APK artefaktını yükle
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
