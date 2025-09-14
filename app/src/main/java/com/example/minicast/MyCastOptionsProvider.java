@@ -8,10 +8,7 @@ import java.util.List;
 
 public class MyCastOptionsProvider implements OptionsProvider {
   @Override public CastOptions getCastOptions(Context context) {
-    // Default Media Receiver
-    return new CastOptions.Builder().build();
+    return new CastOptions.Builder().build(); // Default Media Receiver
   }
-  @Override public List<SessionProvider> getAdditionalSessionProviders(Context context) {
-    return null;
-  }
+  @Override public List<SessionProvider> getAdditionalSessionProviders(Context context) { return null; }
 }
