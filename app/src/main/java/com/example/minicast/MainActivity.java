@@ -43,7 +43,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText urlInput;
     private ExtendedFloatingActionButton fabTv;
 
-    // Cihaz listesi (Cast + DLNA tek yerde)
+    // Tek listede Cast + DLNA cihazları
     private final List<TargetDevice> foundDevices = new CopyOnWriteArrayList<>();
     private final List<TargetDevice> deviceIndex = new ArrayList<>();
     private ArrayAdapter<String> deviceAdapter;
@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
     // DLNA
     private WifiManager wifiManager;
 
-    // UI state
+    // FAB UI state
     private enum UiState { IDLE, SEARCHING, READY, CONNECTED }
     private UiState ui = UiState.IDLE;
 
@@ -127,7 +127,7 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    /* -------------------------------- UI state ------------------------------------ */
+    /* -------------------------------- UI State ------------------------------------ */
 
     private void setUi(UiState s) {
         ui = s;
@@ -192,18 +192,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startDiscovery() {
-        // DLNA keşfi
+        // DLNA keşfi (MulticastLock'u içeride yönetiyor)
         DlnaDiscovery dlna = new DlnaDiscovery(wifiManager);
         dlna.discoverAsync(new DlnaDiscovery.Listener() {
             @Override public void onDeviceFound(TargetDevice device) { addDevice(device); }
             @Override public void onDone() { /* no-op */ }
         }, 8000);
 
-        // Chromecast keşfi (Cast SDK route’larını MediaRouter tabanlı ayrı sınıfla yapıyorsanız, burada çağırın)
-        // NOT: Eğer kendi CastDiscovery sınıfınız varsa, paralel çağırın; sonuçlar addDevice() ile aynı listeye düşsün.
+        // Chromecast keşfi: Kendi CastDiscovery sınıfınızı kullanıyorsanız paralel başlatın ve addDevice(...) ile aynı listeye ekleyin.
         // Örn:
-        // CastDiscovery cast = new CastDiscovery(this, (TargetDevice d) -> addDevice(d));
-        // cast.start();  // dialog kapandığında cast.stop() çağırabilirsiniz.
+        // CastDiscovery cast = new CastDiscovery(this, new CastDiscovery.Listener() {
+        //     @Override public void onDeviceFound(TargetDevice device) { addDevice(device); }
+        //     @Override public void onDone() { /* no-op */ }
+        // });
+        // cast.start();
+        // Not: Dialog kapanırken cast.stop() çağırabilirsiniz.
     }
 
     private void addDevice(TargetDevice d) {
@@ -213,7 +216,7 @@ public class MainActivity extends AppCompatActivity {
         foundDevices.add(d);
         deviceIndex.add(d);
         runOnUiThread(() -> {
-            deviceAdapter.add(d.getName()); // protokolü kullanıcıya göstermiyoruz
+            deviceAdapter.add(d.getName()); // protokolü göstermiyoruz
             deviceAdapter.notifyDataSetChanged();
         });
     }
@@ -307,4 +310,4 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
-}
+            }
