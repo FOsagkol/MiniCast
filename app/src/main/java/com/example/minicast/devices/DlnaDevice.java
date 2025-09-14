@@ -3,10 +3,10 @@ package com.example.minicast.devices;
 import java.net.URL;
 
 public class DlnaDevice {
-    public final String usn;
-    public final String friendlyName;
-    public final URL locationUrl;
-    public final URL controlUrl;
+    private final String usn;
+    private final String friendlyName;
+    private final URL locationUrl;
+    private final URL controlUrl;
 
     public DlnaDevice(String usn, String friendlyName, URL locationUrl, URL controlUrl) {
         this.usn = usn;
@@ -14,6 +14,11 @@ public class DlnaDevice {
         this.locationUrl = locationUrl;
         this.controlUrl = controlUrl;
     }
+
+    public String getUsn() { return usn; }
+    public String getFriendlyName() { return friendlyName; }
+    public URL getLocationUrl() { return locationUrl; }
+    public URL getControlUrl() { return controlUrl; }
 
     @Override public String toString() { return friendlyName != null ? friendlyName : usn; }
 }
