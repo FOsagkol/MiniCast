@@ -4,7 +4,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Mevcut içerik: toolbar + adres çubuğu + webview -->
     <LinearLayout
         android:orientation="vertical"
         android:layout_width="match_parent"
@@ -14,7 +13,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:title="MiniCast"
+            app:title="@string/app_name"
             app:menu="@menu/main_menu"/>
 
         <LinearLayout
@@ -28,30 +27,31 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:hint="https://" />
+                android:hint="https://"/>
 
             <Button
                 android:id="@+id/goBtn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Git" />
+                android:text="Git"/>
         </LinearLayout>
 
         <WebView
             android:id="@+id/web"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1"/>
     </LinearLayout>
 
-    <!-- Sağ-altta görünen TV butonu -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <!-- İstersen görünür tek tuş için kullan; MainActivity bu id'yi opsiyonel kullanıyor -->
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabTv"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:contentDescription="TV'ye bağlan"
-        app:srcCompat="@android:drawable/stat_sys_data_bluetooth"
-        app:tint="@android:color/white"
-        android:layout_gravity="bottom|end" />
+        app:icon="@android:drawable/ic_media_play"
+        app:iconTint="@android:color/white"
+        android:text="TV"
+        android:layout_gravity="bottom|end"/>
 </FrameLayout>
