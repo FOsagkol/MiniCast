@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">MiniCast</string>
     <string name="media_route_menu_title">Cast</string>
+    <!-- Google Cast alıcı uygulama ID'si (Gerçek APP ID'nizi buraya girin) -->
+    <string name="app_id">YOUR_APPLICATION_ID_HERE</string>
 </resources>
