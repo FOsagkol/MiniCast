@@ -2,14 +2,15 @@ name: Android CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,34 +19,31 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          accept-android-sdk-licenses: "yes"
+          accept-android-sdk-licenses: true         # <-- BURASI
+          cmdline-tools-version: 12266719
           packages: |
             platform-tools
             platforms;android-34
             build-tools;34.0.0
 
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
+
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # BUILD'DEN HEMEN ÖNCE DOĞRULAMA
-      - name: Verify Gradle wrapper on runner
-        run: |
-          ls -l gradle/wrapper || true
-          unzip -p gradle/wrapper/gradle-wrapper.jar META-INF/MANIFEST.MF | sed -n '1,20p' || true
-          jar tf gradle/wrapper/gradle-wrapper.jar | head -n 10 || true
-
       - name: Build debug APK
-        run: ./gradlew --no-daemon clean assembleDebug --stacktrace --warning-mode all
+        run: ./gradlew --no-daemon clean assembleDebug
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
