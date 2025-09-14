@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Marka paleti -->
-    <color name="minicast_orange">#FF6A00</color>
-    <color name="minicast_black">#000000</color>
-    <color name="minicast_white">#FFFFFF</color>
 
-    <!-- Tema bağları -->
-    <color name="colorPrimary">@color/minicast_orange</color>
-    <color name="colorOnPrimary">@color/minicast_white</color>
-    <color name="colorSurface">@color/minicast_white</color>
-    <color name="colorOnSurface">@color/minicast_black</color>
+    <!-- Kurumsal palet -->
+    <color name="mc_orange">#FF6A00</color>
+    <color name="mc_orange_dark">#E65E00</color>
+    <color name="mc_black">#000000</color>
+    <color name="mc_white">#FFFFFF</color>
+    <color name="mc_grey_900">#1E1E1E</color>
 
-    <!-- Launcher gereksinimi -->
-    <color name="ic_launcher_background">@color/minicast_white</color>
+    <!-- TV durum renkleri (MainActivity kullanıyor) -->
+    <color name="tv_ready_bg">@color/mc_orange</color>
+    <color name="tv_ready_text">@color/mc_white</color>
+
+    <color name="tv_connected_bg">@color/mc_grey_900</color>
+    <color name="tv_connected_text">@color/mc_white</color>
+
+    <!-- Launcher için daha önce eksik bildirilen renk -->
+    <color name="ic_launcher_background">@color/mc_white</color>
+
 </resources>
