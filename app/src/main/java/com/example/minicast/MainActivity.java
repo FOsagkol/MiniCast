@@ -24,15 +24,32 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.mediarouter.media.MediaRouter;
 
+import com.example.minicast.devices.CastDeviceWrapper;
+import com.example.minicast.devices.CastDiscovery;
 import com.example.minicast.devices.DlnaDevice;
 import com.example.minicast.devices.DlnaDiscovery;
+import com.example.minicast.devices.TargetDevice;
+import com.google.android.gms.cast.MediaInfo;
+import com.google.android.gms.cast.MediaLoadRequestData;
+import com.google.android.gms.cast.MediaMetadata;
+import com.google.android.gms.cast.framework.CastContext;
+import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+/**
+ * Tek tuşla ÇİFT keşif: Chromecast + DLNA
+ * - Konum izni & Konum servis kontrolü (Chromecast keşfi için şart)
+ * - Aynı diyalogda iki protokolden gelen cihazlar listelenir
+ * - Chromecast seçilince route seçilir; DLNA seçilince SetURI+Play yapılır
+ */
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQ_LOC = 1001;
@@ -43,11 +60,21 @@ public class MainActivity extends AppCompatActivity {
     private Button goBtn;
     private ExtendedFloatingActionButton fabTv;
 
-    private final List<DlnaDevice> dlnaDevices = new ArrayList<>();
+    /** Tek listede iki tür cihaz tutuyoruz (CastDeviceWrapper veya DlnaDevice) */
+    private final List<Object> foundDevices = new ArrayList<>();
+    private final Set<String> seenKeys = new HashSet<>();
     private ArrayAdapter<String> deviceAdapter;
     private AlertDialog deviceDialog;
 
-    private DlnaDevice pendingDevice;
+    /** Keşiflerin tamamlanma durumu (başlık güncellemek için) */
+    private volatile boolean dlnaDone = false;
+    private volatile boolean castDone = false;
+
+    /** CastDiscovery referansı; durdurmak için tutulur */
+    private CastDiscovery castDiscovery;
+
+    /** Seçim sonrası oynatma için bekleyen hedef (Cast veya DLNA) */
+    private Object pendingTarget;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,10 +97,12 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Cast Framework'ü erkenden ayağa kaldır (session callback'leri için iyi olur)
+        try { CastContext.getSharedInstance(this); } catch (Throwable ignore) {}
+
         fabTv = findViewById(R.id.fabTv);
         if (fabTv != null) {
             fabTv.setOnClickListener(v -> startUnifiedDiscovery());
-            // Renkler projendeki values/colors.xml’den geliyor
             fabTv.setBackgroundTintList(
                     android.content.res.ColorStateList.valueOf(getColor(R.color.tv_ready_bg)));
             fabTv.setTextColor(getColor(R.color.tv_ready_text));
@@ -115,11 +144,32 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    /** Tek tuş akışı: önce izin/konum kontrolü, sonra mevcut DLNA keşfi */
+    /** Tek tuş: önce izin/konum, sonra Chromecast + DLNA paralel keşif */
     private void startUnifiedDiscovery() {
         if (!ensureDiscoveryPermissionAndLocation()) return;
-        startDlnaDiscovery();
-        // İleride CastDiscovery eklersek buraya paralel olarak ekleriz.
+
+        // UI hazırla
+        foundDevices.clear();
+        seenKeys.clear();
+        dlnaDone = false;
+        castDone = false;
+
+        deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
+        deviceDialog = new AlertDialog.Builder(this)
+                .setTitle("Cihazlar aranıyor…")
+                .setAdapter(deviceAdapter, (d, which) -> onDeviceChosen(foundDevices.get(which)))
+                .setNegativeButton("Kapat", (d, w) -> stopCastDiscovery())
+                .create();
+        deviceDialog.show();
+
+        // DLNA keşfini başlat
+        startDlnaScan();
+
+        // Chromecast keşfini başlat
+        startCastScan();
+
+        // Güvenli kapanış: 10sn sonra Cast keşfini kendimiz durduralım
+        web.postDelayed(this::stopCastDiscovery, 10_000);
     }
 
     /** Android 6+ için: Konum izni verildi mi ve servis açık mı? */
@@ -165,43 +215,109 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Mevcut DLNA keşif diyalogu (sendeki akış korunuyor) */
-    private void startDlnaDiscovery() {
-        dlnaDevices.clear();
+    /* ----------------------- DLNA KEŞFİ ----------------------- */
 
-        deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
-        deviceDialog = new AlertDialog.Builder(this)
-                .setTitle("Cihazlar aranıyor…")
-                .setAdapter(deviceAdapter, (d, which) -> onDeviceChosen(dlnaDevices.get(which)))
-                .setNegativeButton("Kapat", null)
-                .create();
-        deviceDialog.show();
-
+    private void startDlnaScan() {
         DlnaDiscovery.discover(this, new DlnaDiscovery.Listener() {
             @Override public void onDeviceFound(DlnaDevice device) {
+                runOnUiThread(() -> addDeviceIfNew(device.getUsn() != null ? "DLNA:" + device.getUsn()
+                                                                           : "DLNA:" + device.getFriendlyName(),
+                                                   device.getFriendlyName(),
+                                                   device));
+            }
+
+            @Override public void onDone() {
                 runOnUiThread(() -> {
-                    dlnaDevices.add(device);
-                    deviceAdapter.add(device.getFriendlyName());
-                    deviceAdapter.notifyDataSetChanged();
+                    dlnaDone = true;
+                    updateDialogTitle();
                 });
             }
+
             @Override public void onError(Exception e) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         "DLNA hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
                         Toast.LENGTH_LONG).show());
             }
-            @Override public void onDone() {
-                runOnUiThread(() -> {
-                    if (deviceDialog != null && deviceDialog.isShowing()) {
-                        deviceDialog.setTitle(dlnaDevices.isEmpty() ? "Cihaz bulunamadı" : "Cihaz seçin");
-                    }
-                });
-            }
         });
     }
 
-    private void onDeviceChosen(DlnaDevice device) {
-        // Sayfadaki video URL’sini çek ve TV’ye gönder
+    /* --------------------- CHROMECAST KEŞFİ -------------------- */
+
+    private void startCastScan() {
+        castDiscovery = new CastDiscovery(this, device -> {
+            // device -> TargetDevice (CastDeviceWrapper)
+            if (device instanceof CastDeviceWrapper) {
+                CastDeviceWrapper cdw = (CastDeviceWrapper) device;
+                String key = "CAST:" + cdw.getId();
+                String name = cdw.getName();
+                runOnUiThread(() -> addDeviceIfNew(key, name, cdw));
+            }
+        });
+        castDiscovery.start();
+    }
+
+    private void stopCastDiscovery() {
+        if (castDiscovery != null) {
+            try { castDiscovery.stop(); } catch (Throwable ignore) {}
+            castDiscovery = null;
+        }
+        if (!castDone) {
+            castDone = true;
+            updateDialogTitle();
+        }
+    }
+
+    /* --------------------- DİYALOG / LİSTE --------------------- */
+
+    private void addDeviceIfNew(String key, String displayName, Object deviceObj) {
+        if (key == null || displayName == null || deviceObj == null) return;
+        if (!seenKeys.add(key)) return;
+
+        foundDevices.add(deviceObj);
+        deviceAdapter.add(displayName);
+        deviceAdapter.notifyDataSetChanged();
+        updateDialogTitle();
+    }
+
+    private void updateDialogTitle() {
+        if (deviceDialog == null || !deviceDialog.isShowing()) return;
+        boolean any = !foundDevices.isEmpty();
+        boolean allDone = dlnaDone && castDone;
+        if (!any && !allDone) {
+            deviceDialog.setTitle("Cihazlar aranıyor…");
+        } else if (any && !allDone) {
+            deviceDialog.setTitle("Cihazlar (aranıyor…)"); // bir şeyler bulundu ama diğer tarama sürüyor
+        } else {
+            deviceDialog.setTitle(any ? "Cihaz seçin" : "Cihaz bulunamadı");
+        }
+    }
+
+    /* ----------------------- SEÇİM / OYNAT --------------------- */
+
+    private void onDeviceChosen(Object device) {
+        // Chromecast ise: route seç ve sayfadaki URL’i al
+        if (device instanceof CastDeviceWrapper) {
+            CastDeviceWrapper wrapper = (CastDeviceWrapper) device;
+            MediaRouter mediaRouter = MediaRouter.getInstance(getApplicationContext());
+            if (wrapper.getRoute() != null) {
+                mediaRouter.selectRoute(wrapper.getRoute());
+                Toast.makeText(this, "Chromecast seçildi, bağlantı kuruluyor…", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Chromecast route bilgisi yok.", Toast.LENGTH_SHORT).show();
+            }
+            pendingTarget = device;
+            requestPageVideoUrl(); // URL’i al, JsBridge içinde Cast etmeyi dene
+            return;
+        }
+
+        // DLNA ise: URL’i alıp AVTransport’a gönder
+        if (device instanceof DlnaDevice) {
+            pendingTarget = device;
+            requestPageVideoUrl();
+        }
+    }
+
+    private void requestPageVideoUrl() {
         String js = "javascript:(function(){try{"
                 + "var v=document.querySelector('video');"
                 + "var u=v?(v.currentSrc||v.src||''):'';"
@@ -209,16 +325,13 @@ public class MainActivity extends AppCompatActivity {
                 + "MiniCast.onVideoSelected(u||'');"
                 + "}catch(e){MiniCast.onVideoSelected('');}})();";
         web.evaluateJavascript(js, null);
-
-        // URL geldikten sonra JsBridge içinde oynatma tetiklenecek
-        pendingDevice = device;
     }
 
     private class JsBridge {
         @JavascriptInterface
         public void onVideoSelected(String url) {
             runOnUiThread(() -> {
-                if (pendingDevice == null) {
+                if (pendingTarget == null) {
                     Toast.makeText(MainActivity.this, "Cihaz seçilmedi.", Toast.LENGTH_SHORT).show();
                     return;
                 }
@@ -226,13 +339,63 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(MainActivity.this, "Bu video (DRM/blob) aktarılamıyor.", Toast.LENGTH_LONG).show();
                     return;
                 }
-                new Thread(() -> {
-                    boolean ok = DlnaDiscovery.setUriAndPlay(pendingDevice.getControlUrl(), url);
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                            ok ? "TV’de oynatılıyor" : "DLNA oynatma başarısız",
-                            Toast.LENGTH_SHORT).show());
-                }).start();
+
+                // Hedefe göre yönlendir
+                if (pendingTarget instanceof DlnaDevice) {
+                    DlnaDevice d = (DlnaDevice) pendingTarget;
+                    new Thread(() -> {
+                        boolean ok = DlnaDiscovery.setUriAndPlay(d.getControlUrl(), url);
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                                ok ? "TV’de oynatılıyor" : "DLNA oynatma başarısız",
+                                Toast.LENGTH_SHORT).show());
+                    }).start();
+                } else if (pendingTarget instanceof CastDeviceWrapper) {
+                    tryCastLoad(url);
+                }
             });
         }
+    }
+
+    /* ---------------------- CAST PLAY YARDIMCI ------------------ */
+
+    private void tryCastLoad(String url) {
+        try {
+            CastContext cc = CastContext.getSharedInstance(this);
+            CastSession session = (cc != null) ? cc.getSessionManager().getCurrentCastSession() : null;
+            if (session == null || session.getRemoteMediaClient() == null) {
+                Toast.makeText(this, "Cast oturumu hazır değil; bağlandıktan sonra tekrar deneyin.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // İçerik tipini kestiremiyorsak mp4 varsayıyoruz (HLS/DASH için tiplendirme gerekli olabilir)
+            String contentType = guessContentType(url);
+
+            MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
+            md.putString(MediaMetadata.KEY_TITLE, "MiniCast");
+
+            MediaInfo mediaInfo = new MediaInfo.Builder(url)
+                    .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+                    .setContentType(contentType)
+                    .setMetadata(md)
+                    .build();
+
+            MediaLoadRequestData req = new MediaLoadRequestData.Builder()
+                    .setMediaInfo(mediaInfo)
+                    .build();
+
+            session.getRemoteMediaClient().load(req);
+            Toast.makeText(this, "Chromecast’e gönderildi", Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "Cast yükleme hatası: " + t.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String guessContentType(String url) {
+        String u = url.toLowerCase();
+        if (u.contains(".m3u8")) return "application/x-mpegurl"; // HLS
+        if (u.contains(".mpd"))  return "application/dash+xml";  // DASH
+        if (u.contains(".webm")) return "video/webm";
+        if (u.contains(".mp4"))  return "video/mp4";
+        return "video/*";
     }
 }
