@@ -24,39 +24,45 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Sadece SDK'yı kur; lisansları biz yöneteceğiz
+      # Sadece cmdline-tools kur; paketleri ve lisansları biz yöneteceğiz
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: false
+          log-accepted-android-sdk-licenses: false
           cmdline-tools-version: 12266719
 
-      # En yeni cmdline-tools sürümünü seç ve ENV'e yaz
-      - name: Select newest sdkmanager
+      # sdkmanager yolunu güvenli şekilde seç (latest varsa onu, yoksa en yeni numaralı klasörü)
+      - name: Select sdkmanager
         run: |
-          NEWEST_CTOOLS="$(ls -d ${ANDROID_SDK_ROOT}/cmdline-tools/* 2>/dev/null \
-            | grep -E '/[0-9]+\.[0-9]+$' | sort -V | tail -1)"
-          echo "Using cmdline-tools at: ${NEWEST_CTOOLS}"
-          echo "SDKMANAGER=${NEWEST_CTOOLS}/bin/sdkmanager" >> $GITHUB_ENV
+          CANDIDATE="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$CANDIDATE" ]; then
+            echo "SDKMANAGER=$CANDIDATE" >> $GITHUB_ENV
+          else
+            NEWEST="$(ls -d ${ANDROID_SDK_ROOT}/cmdline-tools/* 2>/dev/null | grep -E '/[0-9]+' | sort -V | tail -1)"
+            echo "Using cmdline-tools at: $NEWEST"
+            echo "SDKMANAGER=${NEWEST}/bin/sdkmanager" >> $GITHUB_ENV
+          fi
 
-      # Lisansları non-interactive kabul et (interaktif promptu engeller)
+      # Lisansları non-interactive kabul et
       - name: Accept Android SDK licenses
         run: yes | "$SDKMANAGER" --licenses --sdk_root="${ANDROID_SDK_ROOT}"
 
-      # Gerekli paketleri aynı sdkmanager ile kur
+      # Gerekli paketleri kur (sadece bunlar yeterli)
       - name: Install required Android packages
         run: |
           "$SDKMANAGER" --sdk_root="${ANDROID_SDK_ROOT}" --install \
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;34.0.0"
-          "$SDKMANAGER" --sdk_root="${ANDROID_SDK_ROOT}" --update
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v3
 
-      - name: Setup Gradle cache
+      - name: Setup Gradle cache (read-only)
         uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: true
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
