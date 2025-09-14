@@ -5,8 +5,8 @@
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
-        android:supportsRtl="true">
-        android:theme="@style/Theme.MiniCast"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MiniCast">
         
         <!-- Cast SDK konfigürasyonu -->
         <meta-data
