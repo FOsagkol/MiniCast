@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Ana palet -->
     <color name="mc_orange">#FF8A00</color>
@@ -5,6 +6,14 @@
     <color name="mc_black">#121212</color>
     <color name="mc_white">#FFFFFF</color>
     <color name="mc_grey">#2A2A2A</color>
+
+    <!-- Splash katmanları için ek turuncu tonlar (minicast_orange_layers.xml kullanır) -->
+    <color name="mc_orange_900">#FF6A00</color>
+    <color name="mc_orange_800">#FF78000</color>
+    <color name="mc_orange_700">#FF8600</color>
+    <color name="mc_orange_600">#FF9400</color>
+    <color name="mc_orange_500">#FFA200</color>
+    <color name="mc_orange_400">#FFB000</color>
 
     <!-- Eksik olan launcher background -->
     <color name="ic_launcher_background">@color/mc_orange</color>
