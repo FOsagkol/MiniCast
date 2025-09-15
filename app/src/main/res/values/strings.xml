@@ -6,4 +6,5 @@
     <!-- Tek tırnak kaldırıldı -->
     <string name="connect_to_tv">TV ye bağlan</string>
     <string name="go">Git</string>
+    <string name="media_route_menu_title">Cihaza bağlan</string>
 </resources>
