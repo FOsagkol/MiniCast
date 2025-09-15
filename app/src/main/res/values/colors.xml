@@ -1,21 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <!-- Kurumsal palet -->
-    <color name="mc_orange">#FF6A00</color>
-    <color name="mc_orange_dark">#E65E00</color>
-    <color name="mc_black">#000000</color>
+    <!-- Ana palet -->
+    <color name="mc_orange">#FF8A00</color>
+    <color name="mc_orange_dark">#E67600</color>
+    <color name="mc_black">#121212</color>
     <color name="mc_white">#FFFFFF</color>
-    <color name="mc_grey_900">#1E1E1E</color>
+    <color name="mc_grey">#2A2A2A</color>
 
-    <!-- TV durum renkleri (MainActivity kullanıyor) -->
-    <color name="tv_ready_bg">@color/mc_orange</color>
-    <color name="tv_ready_text">@color/mc_white</color>
-
-    <color name="tv_connected_bg">@color/mc_grey_900</color>
-    <color name="tv_connected_text">@color/mc_white</color>
-
-    <!-- Launcher için daha önce eksik bildirilen renk -->
-    <color name="ic_launcher_background">@color/mc_white</color>
-
+    <!-- Material renk eşlemeleri -->
+    <color name="colorPrimary">@color/mc_orange</color>
+    <color name="colorPrimaryVariant">@color/mc_orange_dark</color>
+    <color name="colorOnPrimary">@color/mc_white</color>
+    <color name="colorSecondary">@color/mc_black</color>
+    <color name="colorOnSecondary">@color/mc_white</color>
+    <color name="colorBackground">@color/mc_black</color>
+    <color name="colorOnBackground">@color/mc_white</color>
+    <color name="colorSurface">@color/mc_black</color>
+    <color name="colorOnSurface">@color/mc_white</color>
 </resources>
