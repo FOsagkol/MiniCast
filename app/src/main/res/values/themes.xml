@@ -1,3 +1,14 @@
-<resources>
-  <style name="Theme.MiniCast" parent="Theme.Material3.DayNight.NoActionBar"/>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.MiniCast" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryVariant</item>
+        <item name="colorOnPrimary">@color/colorOnPrimary</item>
+        <item name="colorSecondary">@color/colorSecondary</item>
+        <item name="colorOnSecondary">@color/colorOnSecondary</item>
+        <item name="android:statusBarColor">@color/mc_black</item>
+        <item name="android:navigationBarColor">@color/mc_black</item>
+        <item name="android:windowBackground">@color/mc_black</item>
+        <!-- Dinamik renkleri (Android 12+) kapat: mor gelmesin -->
+        <item name="material3.dynamicColor">false</item>
+    </style>
 </resources>
