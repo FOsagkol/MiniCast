@@ -1,482 +1,187 @@
 package com.example.minicast;
 
 import android.annotation.SuppressLint;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.location.LocationManager;
+import android.content.ContentValues;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
-import android.text.TextUtils;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.os.SystemClock;
+import android.util.Log;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.inputmethod.InputMethodManager;
-import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
+
 import android.widget.ImageButton;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.mediarouter.media.MediaRouter;
 
-import com.example.minicast.devices.CastDeviceWrapper;
-import com.example.minicast.devices.CastDiscovery;
-import com.example.minicast.devices.DlnaDevice;
-import com.example.minicast.devices.DlnaDiscovery;
-import com.example.minicast.devices.TargetDevice;
-import com.google.android.gms.cast.MediaInfo;
-import com.google.android.gms.cast.MediaLoadRequestData;
-import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.framework.CastContext;
-import com.google.android.gms.cast.framework.CastSession;
-import com.google.android.material.appbar.MaterialToolbar;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 
+/**
+ * MiniCast – sade Activity
+ * - Çift log: app-özel dosya + Downloads + logcat (MiniCastCrash)
+ * - Hızlı WebView açılışı
+ * - CastContext init try/catch (erken init kill’lerine karşı güvenli)
+ *
+ * NOT: layout tarafında en azından aşağıdaki id’ler olmalı:
+ *   - R.layout.activity_main
+ *   - R.id.web  (WebView)
+ *   - R.id.btnCast  (ImageButton)  — yoksa sorun değil, null kontrolü var.
+ */
 public class MainActivity extends AppCompatActivity {
 
-    private static final int REQ_LOC = 1001;
+    private static final String TAG = "MiniCastCrash";
 
-    private MaterialToolbar toolbar;
     private WebView web;
-    private EditText urlInput;
-    private Button goBtn;
-    private ImageButton btnCast; // Görsel TV butonu
+    private ImageButton btnCast;
 
-    private View urlCard;
-    private int urlCollapsedHeightPx, urlExpandedHeightPx;
+    /* =====================  LOG YARDIMCILARI  ===================== */
 
-    private final List<Object> foundDevices = new ArrayList<>();
-    private final Set<String> seenKeys = new HashSet<>();
-    private ArrayAdapter<String> deviceAdapter;
-    private AlertDialog deviceDialog;
+    // MediaStore ile Downloads’a ek dosya düş (API 29+)
+    private boolean writeToDownloads(String fileName, String text) {
+        try {
+            ContentValues v = new ContentValues();
+            v.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName);
+            v.put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain");
+            Uri uri = getContentResolver()
+                    .insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri != null) {
+                try (java.io.OutputStream os =
+                             getContentResolver().openOutputStream(uri, "wa")) {
+                    os.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    os.flush();
+                }
+                return true;
+            }
+        } catch (Throwable ignore) {}
+        return false;
+    }
 
-    private volatile boolean dlnaDone = false;
-    private volatile boolean castDone = false;
+    // Dosyaya (app-özel) + logcat’e yaz; mümkünse Downloads’a da yansıt
+    private void dbg(String msg, @Nullable Throwable e) {
+        Log.e(TAG, msg, e); // logcat
 
-    private CastDiscovery castDiscovery;
-    private Object pendingTarget;
+        try {
+            File dir = getExternalFilesDir(null); // /sdcard/Android/data/.../files
+            if (dir != null) {
+                File f = new File(dir, "crash.txt");
+                try (FileOutputStream fos = new FileOutputStream(f, true);
+                     OutputStreamWriter osw = new OutputStreamWriter(fos, java.nio.charset.StandardCharsets.UTF_8);
+                     PrintWriter pw = new PrintWriter(osw)) {
+
+                    pw.println("=== " + new java.util.Date() + " ===");
+                    pw.println(msg);
+                    if (e != null) e.printStackTrace(pw);
+                    pw.flush();
+                    osw.flush();
+                    fos.getFD().sync(); // diske yazmayı zorla
+                }
+            }
+        } catch (Throwable ignore) {}
+
+        try {
+            String payload = "=== " + new java.util.Date() + " ===\n"
+                    + msg + "\n"
+                    + (e != null ? Log.getStackTraceString(e) : "") + "\n";
+            writeToDownloads("minicast_crash.txt", payload);
+        } catch (Throwable ignore) {}
+
+        try { SystemClock.sleep(200); } catch (Throwable ignored) {} // kill öncesi flush
+    }
+
+    private void dbg(String msg) { dbg(msg, null); }
+
+    /* =====================  ACTIVITY  ===================== */
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        
-
-        // --- Crash logger: beklenmeyen hataları dosyaya dök ---
+        // 1) Global yakalayıcı: beklenmeyen hatayı hem dosyaya hem Downloads’a hem logcat’e yaz.
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            dbg("Uncaught in thread: " + t.getName(), e);
             try {
-                java.io.File dir = getExternalFilesDir(null); // Güvenli, izin gerektirmez
-                if (dir != null) {
-                    java.io.File f = new java.io.File(dir, "crash.txt");
-                    try (java.io.PrintWriter pw =
-                            new java.io.PrintWriter(new java.io.FileWriter(f, /*append*/ true))) {
-                        pw.println("=== " + new java.util.Date() + " ===");
-                        pw.println("Thread: " + t.getName());
-                        e.printStackTrace(pw);
-                    }
-                }
-            } catch (Throwable ignore) { /* yut */ }
-            try {
-                android.widget.Toast.makeText(this, "Hata: " + e.getClass().getSimpleName(), android.widget.Toast.LENGTH_LONG).show();
-            } catch (Throwable ignored) { }
+                Toast.makeText(this, "Hata: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
+            } catch (Throwable ignored) {}
         });
-        // --- Crash logger SON ---
-// Android 12+ sistem Splash: çıkışta fade-out (1.2 sn)
+        dbg("onCreate: START (handler installed)");
+
+        // 2) Splash/çıkış animasyonu (Android 12+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getSplashScreen().setOnExitAnimationListener(splashView -> {
-                splashView.getIconView().setAlpha(1f);
-                splashView.getIconView().animate()
-                        .alpha(0f)
-                        .setDuration(1200L)
-                        .withEndAction(splashView::remove)
-                        .start();
-            });
+            try {
+                getSplashScreen().setOnExitAnimationListener(splashView -> {
+                    splashView.getIconView().setAlpha(1f);
+                    splashView.remove();
+                });
+            } catch (Throwable e) { dbg("splash listener err", e); }
         }
 
+        // 3) Arayüz
+        dbg("before setContentView");
         setContentView(R.layout.activity_main);
+        dbg("after setContentView");
 
-        toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+        // 4) WebView
+        web = findViewById(R.id.web);
+        if (web != null) {
+            setupWebView(web);
+            web.loadUrl("https://www.google.com");
+        } else {
+            dbg("WebView (R.id.web) is null!");
+        }
 
-        // URL bar / WebView
-        urlCard  = findViewById(R.id.urlBar);
-        urlInput = findViewById(R.id.urlInput);
-        goBtn    = findViewById(R.id.goBtn);
-        web      = findViewById(R.id.web);
+        // 5) Cast – güvenli init (hemen kill olursa try/catch)
+        try {
+            CastContext.getSharedInstance(this);
+            dbg("CastContext initialized");
+        } catch (Throwable e) {
+            dbg("CastContext init failed", e);
+        }
 
-        setupWebView();
-        setupUrlBar();
-
-        goBtn.setOnClickListener(v -> {
-            String url = urlInput.getText().toString().trim();
-            if (!TextUtils.isEmpty(url)) {
-                if (!url.startsWith("http")) url = "https://" + url;
-                web.loadUrl(url);
-            }
-        });
-
-        // Cast Framework
-        try { CastContext.getSharedInstance(this); } catch (Throwable ignore) {}
-
-        // Yeni ImageButton
+        // 6) Buton
         btnCast = findViewById(R.id.btnCast);
         if (btnCast != null) {
-            btnCast.setOnClickListener(v -> startUnifiedDiscovery());
+            btnCast.setOnClickListener(v -> {
+                dbg("btnCast clicked");
+                Toast.makeText(this, "Cast menüsü/keşfi burada tetiklenecek.", Toast.LENGTH_SHORT).show();
+                // Burada mevcut keşif/bağlama kodunuzu çağırabilirsiniz (DLNA/Cast).
+            });
         }
+        dbg("onCreate: END");
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void setupWebView(WebView wv) {
+        WebSettings s = wv.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
+        s.setBuiltInZoomControls(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            s.setSafeBrowsingEnabled(true);
+        }
+        wv.setWebChromeClient(new WebChromeClient());
+        wv.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
     }
 
     @Override
     protected void onStop() {
-        safeDismissDeviceDialog();
-        stopCastDiscovery();
         super.onStop();
+        dbg("onStop");
     }
 
     @Override
     protected void onDestroy() {
-        safeDismissDeviceDialog();
-        stopCastDiscovery();
+        dbg("onDestroy");
         super.onDestroy();
     }
-
-    @SuppressLint({"SetJavaScriptEnabled"})
-    private void setupWebView() {
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
-
-        web.addJavascriptInterface(new JsBridge(), "MiniCast");
-        web.setWebChromeClient(new WebChromeClient());
-        web.setWebViewClient(new WebViewClient() {
-            @Override public void onPageFinished(WebView view, String url) {
-                urlInput.setText(url);
             }
-        });
-
-        web.loadUrl("https://www.google.com");
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private void setupUrlBar() {
-        if (urlCard == null || urlInput == null) return;
-
-        float d = getResources().getDisplayMetrics().density;
-        urlCollapsedHeightPx = (int) (36 * d);
-        urlExpandedHeightPx  = (int) (48 * d);
-
-        urlInput.setOnFocusChangeListener((v, hasFocus) -> {
-            ViewGroup.LayoutParams lp = urlCard.getLayoutParams();
-            lp.height = hasFocus ? urlExpandedHeightPx : urlCollapsedHeightPx;
-            urlCard.setLayoutParams(lp);
-
-            if (hasFocus) {
-                urlInput.setEllipsize(null);
-                urlInput.selectAll();
-            } else {
-                urlInput.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-            }
-        });
-
-        urlCard.setOnClickListener(v -> {
-            urlInput.requestFocus();
-            urlInput.post(() -> {
-                InputMethodManager imm =
-                        (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (imm != null) imm.showSoftInput(urlInput, InputMethodManager.SHOW_IMPLICIT);
-            });
-        });
-
-        ViewGroup.LayoutParams lp = urlCard.getLayoutParams();
-        lp.height = urlCollapsedHeightPx;
-        urlCard.setLayoutParams(lp);
-        urlInput.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-        urlInput.setSingleLine(true);
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.main_menu, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        if (item.getItemId() == R.id.action_connect_tv) {
-            startUnifiedDiscovery();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
-    private void startUnifiedDiscovery() {
-        resetDiscoveryState();
-        if (!ensureDiscoveryPermissionAndLocation()) return;
-
-        deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
-        deviceDialog = new AlertDialog.Builder(this)
-                .setTitle("Cihazlar aranıyor…")
-                .setAdapter(deviceAdapter, (d, which) -> onDeviceChosen(foundDevices.get(which)))
-                .setNegativeButton("Kapat", (d, w) -> stopCastDiscovery())
-                .create();
-        deviceDialog.setOnDismissListener(d -> stopCastDiscovery());
-        deviceDialog.show();
-
-        startDlnaScan();
-        startCastScan();
-        web.postDelayed(this::stopCastDiscovery, 10_000);
-    }
-
-    private void resetDiscoveryState() {
-        foundDevices.clear();
-        seenKeys.clear();
-        dlnaDone = false;
-        castDone = false;
-        pendingTarget = null;
-        safeDismissDeviceDialog();
-    }
-
-    private boolean ensureDiscoveryPermissionAndLocation() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOC);
-                Toast.makeText(this, "Cihazları bulmak için Konum izni gerekli", Toast.LENGTH_SHORT).show();
-                return false;
-            }
-        }
-        if (!isLocationServiceEnabled()) {
-            new AlertDialog.Builder(this)
-                    .setMessage("Cast/DLNA keşfi için ‘Konum’ açık olmalı. Ayarlar > Konum’u açalım mı?")
-                    .setPositiveButton("Aç", (d, w) ->
-                            startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
-                    .setNegativeButton("İptal", null)
-                    .show();
-            return false;
-        }
-        return true;
-    }
-
-    private boolean isLocationServiceEnabled() {
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if (lm == null) return false;
-        try {
-            return lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-                    || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-        } catch (Exception ignore) {
-            return false;
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] perms, @NonNull int[] grants) {
-        super.onRequestPermissionsResult(requestCode, perms, grants);
-        if (requestCode == REQ_LOC) {
-            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) {
-                startUnifiedDiscovery();
-            } else {
-                Toast.makeText(this, "Konum izni verilmeden cihazlar listelenemez", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
-    private void startDlnaScan() {
-        DlnaDiscovery.discover(this, new DlnaDiscovery.Listener() {
-            @Override public void onDeviceFound(DlnaDevice device) {
-                runOnUiThread(() -> addDeviceIfNew(
-                        device.getUsn() != null ? "DLNA:" + device.getUsn() : "DLNA:" + device.getFriendlyName(),
-                        device.getFriendlyName(),
-                        device));
-            }
-            @Override public void onDone() {
-                runOnUiThread(() -> {
-                    dlnaDone = true;
-                    updateDialogTitle();
-                });
-            }
-            public void onError(Exception e) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                        "DLNA hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
-                        Toast.LENGTH_LONG).show());
-            }
-        });
-    }
-
-    private void startCastScan() {
-        castDiscovery = new CastDiscovery(this, new CastDiscovery.Listener() {
-            @Override public void onDeviceFound(TargetDevice device) {
-                if (device instanceof CastDeviceWrapper) {
-                    CastDeviceWrapper cdw = (CastDeviceWrapper) device;
-                    String key = "CAST:" + cdw.getId();
-                    String name = cdw.getName();
-                    runOnUiThread(() -> addDeviceIfNew(key, name, cdw));
-                }
-            }
-            @Override public void onDone() {
-                runOnUiThread(() -> {
-                    castDone = true;
-                    updateDialogTitle();
-                });
-            }
-            public void onError(Exception e) {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                        "Cast keşif hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
-                        Toast.LENGTH_LONG).show());
-            }
-        });
-        castDiscovery.start();
-    }
-
-    private void stopCastDiscovery() {
-        if (castDiscovery != null) {
-            try { castDiscovery.stop(); } catch (Throwable ignore) {}
-            castDiscovery = null;
-        }
-        if (!castDone) {
-            castDone = true;
-            updateDialogTitle();
-        }
-    }
-
-    private void safeDismissDeviceDialog() {
-        if (deviceDialog != null && deviceDialog.isShowing()) {
-            try { deviceDialog.dismiss(); } catch (Throwable ignore) {}
-        }
-        deviceDialog = null;
-        deviceAdapter = null;
-    }
-
-    private void addDeviceIfNew(String key, String displayName, Object deviceObj) {
-        if (key == null || displayName == null || deviceObj == null) return;
-        if (!seenKeys.add(key)) return;
-
-        foundDevices.add(deviceObj);
-        if (deviceAdapter != null) {
-            deviceAdapter.add(displayName);
-            deviceAdapter.notifyDataSetChanged();
-        }
-        updateDialogTitle();
-    }
-
-    private void updateDialogTitle() {
-        if (deviceDialog == null || !deviceDialog.isShowing()) return;
-        boolean any = !foundDevices.isEmpty();
-        boolean allDone = dlnaDone && castDone;
-        if (!any && !allDone) {
-            deviceDialog.setTitle("Cihazlar aranıyor…");
-        } else if (any && !allDone) {
-            deviceDialog.setTitle("Cihazlar (aranıyor…)");
-        } else {
-            deviceDialog.setTitle(any ? "Cihaz seçin" : "Cihaz bulunamadı");
-        }
-    }
-
-    private void onDeviceChosen(Object device) {
-        if (device instanceof CastDeviceWrapper) {
-            CastDeviceWrapper wrapper = (CastDeviceWrapper) device;
-            MediaRouter mediaRouter = MediaRouter.getInstance(getApplicationContext());
-            if (wrapper.getRoute() != null) {
-                mediaRouter.selectRoute(wrapper.getRoute());
-                Toast.makeText(this, "Chromecast seçildi, bağlantı kuruluyor…", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "Chromecast route bilgisi yok.", Toast.LENGTH_SHORT).show();
-            }
-            pendingTarget = device;
-            requestPageVideoUrl();
-            return;
-        }
-        if (device instanceof DlnaDevice) {
-            pendingTarget = device;
-            requestPageVideoUrl();
-        }
-    }
-
-    private void requestPageVideoUrl() {
-        String js = "javascript:(function(){try{"
-                + "var v=document.querySelector('video');"
-                + "var u=v?(v.currentSrc||v.src||''):'';"
-                + "if(!u&&v){var s=v.querySelector('source'); if(s) u=s.src;}"
-                + "MiniCast.onVideoSelected(u||'');"
-                + "}catch(e){MiniCast.onVideoSelected('');}})();";
-        web.evaluateJavascript(js, null);
-    }
-
-    private class JsBridge {
-        @JavascriptInterface
-        public void onVideoSelected(String url) {
-            runOnUiThread(() -> {
-                if (pendingTarget == null) {
-                    Toast.makeText(MainActivity.this, "Cihaz seçilmedi.", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if (TextUtils.isEmpty(url) || url.startsWith("blob:")) {
-                    Toast.makeText(MainActivity.this, "Bu video (DRM/blob) aktarılamıyor.", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                if (pendingTarget instanceof DlnaDevice) {
-                    DlnaDevice d = (DlnaDevice) pendingTarget;
-                    new Thread(() -> {
-                        boolean ok = DlnaDiscovery.setUriAndPlay(d.getControlUrl(), url);
-                        runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                                ok ? "TV’de oynatılıyor" : "DLNA oynatma başarısız",
-                                Toast.LENGTH_SHORT).show());
-                    }).start();
-                } else if (pendingTarget instanceof CastDeviceWrapper) {
-                    tryCastLoad(url);
-                }
-            });
-        }
-    }
-
-    private void tryCastLoad(String url) {
-        try {
-            CastContext cc = CastContext.getSharedInstance(this);
-            CastSession session = (cc != null) ? cc.getSessionManager().getCurrentCastSession() : null;
-            if (session == null || session.getRemoteMediaClient() == null) {
-                Toast.makeText(this, "Cast oturumu hazır değil; bağlandıktan sonra tekrar deneyin.", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            String contentType = guessContentType(url);
-            MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
-            md.putString(MediaMetadata.KEY_TITLE, "MiniCast");
-            MediaInfo mediaInfo = new MediaInfo.Builder(url)
-                    .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-                    .setContentType(contentType)
-                    .setMetadata(md)
-                    .build();
-            MediaLoadRequestData req = new MediaLoadRequestData.Builder()
-                    .setMediaInfo(mediaInfo)
-                    .build();
-            session.getRemoteMediaClient().load(req);
-            Toast.makeText(this, "Chromecast’e gönderildi", Toast.LENGTH_SHORT).show();
-        } catch (Throwable t) {
-            Toast.makeText(this, "Cast yükleme hatası: " + t.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private String guessContentType(String url) {
-        String u = url.toLowerCase();
-        if (u.contains(".m3u8")) return "application/x-mpegurl";
-        if (u.contains(".mpd"))  return "application/dash+xml";
-        if (u.contains(".webm")) return "video/webm";
-        if (u.contains(".mp4"))  return "video/mp4";
-        return "video/*";
-    }
-                }
