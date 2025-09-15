@@ -11,7 +11,7 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;                // urlCard artık View
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
@@ -22,6 +22,7 @@ import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -41,8 +42,6 @@ import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.material.appbar.MaterialToolbar;
-// import com.google.android.material.card.MaterialCardView; // GEREK YOK
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -57,12 +56,10 @@ public class MainActivity extends AppCompatActivity {
     private WebView web;
     private EditText urlInput;
     private Button goBtn;
-    private ExtendedFloatingActionButton fabTv;
+    private ImageButton btnCast; // FAB yerine ImageButton
 
-    // --- URL bar alanları (A seçeneği: XML sabit, id: urlBar) ---
-    private View urlCard; // MaterialCardView yerine View
+    private View urlCard;
     private int urlCollapsedHeightPx, urlExpandedHeightPx;
-    // ------------------------------------------------------------
 
     private final List<Object> foundDevices = new ArrayList<>();
     private final Set<String> seenKeys = new HashSet<>();
@@ -84,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
 
         // URL bar / WebView
-        urlCard  = findViewById(R.id.urlBar);   // A seçeneği: urlBar
+        urlCard  = findViewById(R.id.urlBar);
         urlInput = findViewById(R.id.urlInput);
         goBtn    = findViewById(R.id.goBtn);
         web      = findViewById(R.id.web);
@@ -100,25 +97,19 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Cast Framework’u erkenden ayağa kaldır
         try { CastContext.getSharedInstance(this); } catch (Throwable ignore) {}
 
-        fabTv = findViewById(R.id.fabTv);
-        if (fabTv != null) {
-            fabTv.setOnClickListener(v -> startUnifiedDiscovery());
-            fabTv.setBackgroundTintList(
-                    android.content.res.ColorStateList.valueOf(
-                            ContextCompat.getColor(this, R.color.tv_ready_bg)));
-            fabTv.setTextColor(ContextCompat.getColor(this, R.color.tv_ready_text));
+        // Yeni ImageButton
+        btnCast = findViewById(R.id.btnCast);
+        if (btnCast != null) {
+            btnCast.setOnClickListener(v -> startUnifiedDiscovery());
         }
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (!isLocationServiceEnabled()) {
-            // Sessiz bilgi; butona basınca yine yönlendireceğiz.
-        }
+        if (!isLocationServiceEnabled()) { }
     }
 
     @Override
@@ -155,7 +146,6 @@ public class MainActivity extends AppCompatActivity {
         web.loadUrl("https://www.google.com");
     }
 
-    // İnce URL bar odak/ellipsize davranışı — XML’e dokunmadan çalışır
     @SuppressLint("ClickableViewAccessibility")
     private void setupUrlBar() {
         if (urlCard == null || urlInput == null) return;
@@ -170,10 +160,10 @@ public class MainActivity extends AppCompatActivity {
             urlCard.setLayoutParams(lp);
 
             if (hasFocus) {
-                urlInput.setEllipsize(null);  // tam göster
+                urlInput.setEllipsize(null);
                 urlInput.selectAll();
             } else {
-                urlInput.setEllipsize(TextUtils.TruncateAt.MIDDLE); // kısalt
+                urlInput.setEllipsize(TextUtils.TruncateAt.MIDDLE);
             }
         });
 
@@ -186,7 +176,6 @@ public class MainActivity extends AppCompatActivity {
             });
         });
 
-        // Başlangıçta dar görünüm
         ViewGroup.LayoutParams lp = urlCard.getLayoutParams();
         lp.height = urlCollapsedHeightPx;
         urlCard.setLayoutParams(lp);
@@ -209,13 +198,10 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    /** Tek tuş: önce izin/konum, sonra Chromecast + DLNA paralel keşif */
     private void startUnifiedDiscovery() {
         resetDiscoveryState();
-
         if (!ensureDiscoveryPermissionAndLocation()) return;
 
-        // UI hazırla
         deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
         deviceDialog = new AlertDialog.Builder(this)
                 .setTitle("Cihazlar aranıyor…")
@@ -225,13 +211,8 @@ public class MainActivity extends AppCompatActivity {
         deviceDialog.setOnDismissListener(d -> stopCastDiscovery());
         deviceDialog.show();
 
-        // DLNA
         startDlnaScan();
-
-        // Cast
         startCastScan();
-
-        // Güvenli kapanış
         web.postDelayed(this::stopCastDiscovery, 10_000);
     }
 
@@ -244,7 +225,6 @@ public class MainActivity extends AppCompatActivity {
         safeDismissDeviceDialog();
     }
 
-    /** Android 6+ için: Konum izni verildi mi ve servis açık mı? */
     private boolean ensureDiscoveryPermissionAndLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
@@ -289,8 +269,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /* ----------------------- DLNA KEŞFİ ----------------------- */
-
     private void startDlnaScan() {
         DlnaDiscovery.discover(this, new DlnaDiscovery.Listener() {
             @Override public void onDeviceFound(DlnaDevice device) {
@@ -299,14 +277,12 @@ public class MainActivity extends AppCompatActivity {
                         device.getFriendlyName(),
                         device));
             }
-
             @Override public void onDone() {
                 runOnUiThread(() -> {
                     dlnaDone = true;
                     updateDialogTitle();
                 });
             }
-
             public void onError(Exception e) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         "DLNA hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
@@ -314,8 +290,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-
-    /* --------------------- CHROMECAST KEŞFİ -------------------- */
 
     private void startCastScan() {
         castDiscovery = new CastDiscovery(this, new CastDiscovery.Listener() {
@@ -327,14 +301,12 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> addDeviceIfNew(key, name, cdw));
                 }
             }
-
             @Override public void onDone() {
                 runOnUiThread(() -> {
                     castDone = true;
                     updateDialogTitle();
                 });
             }
-
             public void onError(Exception e) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         "Cast keşif hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
@@ -363,8 +335,6 @@ public class MainActivity extends AppCompatActivity {
         deviceAdapter = null;
     }
 
-    /* --------------------- DİYALOG / LİSTE --------------------- */
-
     private void addDeviceIfNew(String key, String displayName, Object deviceObj) {
         if (key == null || displayName == null || deviceObj == null) return;
         if (!seenKeys.add(key)) return;
@@ -390,8 +360,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /* ----------------------- SEÇİM / OYNAT --------------------- */
-
     private void onDeviceChosen(Object device) {
         if (device instanceof CastDeviceWrapper) {
             CastDeviceWrapper wrapper = (CastDeviceWrapper) device;
@@ -406,7 +374,6 @@ public class MainActivity extends AppCompatActivity {
             requestPageVideoUrl();
             return;
         }
-
         if (device instanceof DlnaDevice) {
             pendingTarget = device;
             requestPageVideoUrl();
@@ -435,7 +402,6 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(MainActivity.this, "Bu video (DRM/blob) aktarılamıyor.", Toast.LENGTH_LONG).show();
                     return;
                 }
-
                 if (pendingTarget instanceof DlnaDevice) {
                     DlnaDevice d = (DlnaDevice) pendingTarget;
                     new Thread(() -> {
@@ -459,22 +425,17 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Cast oturumu hazır değil; bağlandıktan sonra tekrar deneyin.", Toast.LENGTH_SHORT).show();
                 return;
             }
-
             String contentType = guessContentType(url);
-
             MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
             md.putString(MediaMetadata.KEY_TITLE, "MiniCast");
-
             MediaInfo mediaInfo = new MediaInfo.Builder(url)
                     .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
                     .setContentType(contentType)
                     .setMetadata(md)
                     .build();
-
             MediaLoadRequestData req = new MediaLoadRequestData.Builder()
                     .setMediaInfo(mediaInfo)
                     .build();
-
             session.getRemoteMediaClient().load(req);
             Toast.makeText(this, "Chromecast’e gönderildi", Toast.LENGTH_SHORT).show();
         } catch (Throwable t) {
@@ -490,4 +451,4 @@ public class MainActivity extends AppCompatActivity {
         if (u.contains(".mp4"))  return "video/mp4";
         return "video/*";
     }
-    }
+}
