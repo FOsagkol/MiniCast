@@ -1,42 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/urlBar"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
-    android:layout_margin="8dp"
-    app:cardUseCompatPadding="true"
-    app:cardElevation="2dp"
-    app:cardCornerRadius="12dp"
-    app:cardBackgroundColor="@android:color/white">
+    android:layout_height="wrap_content"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp"
+    android:orientation="horizontal"
+    android:background="@color/mc_black">
 
-    <!-- İnce URL bar içeriği -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="12dp"
-        android:orientation="horizontal">
+    <EditText
+        android:id="@+id/urlInput"
+        android:layout_width="0dp"
+        android:layout_height="32dp"
+        android:layout_weight="1"
+        android:hint="https://"
+        android:inputType="textUri"
+        android:singleLine="true"
+        android:ellipsize="middle"
+        android:imeOptions="actionGo"
+        android:importantForAutofill="no"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:textSize="12sp"
+        android:textColor="@android:color/white"
+        android:textColorHint="@android:color/darker_gray"
+        android:background="@android:color/transparent" />
 
-        <!-- Kısaltılmış URL metni -->
-        <TextView
-            android:id="@+id/tvUrlShort"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="https://mini…/cast"
-            android:textSize="14sp"/>
-
-        <!-- Tam URL’i göstermek için buton -->
-        <ImageButton
-            android:id="@+id/btnExpandUrl"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/show_full_url"
-            android:src="@android:drawable/arrow_down_float"/>
-    </LinearLayout>
-
-</com.google.android.material.card.MaterialCardView>
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/goBtn"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:layout_marginStart="8dp"
+        android:minWidth="56dp"
+        android:text="@string/go"
+        android:contentDescription="@string/go"
+        app:cornerRadius="8dp" />
+</LinearLayout>
