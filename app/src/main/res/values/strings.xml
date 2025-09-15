@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Uygulama adı (mevcutta varsa koruyabilirsiniz) -->
+    <!-- Uygulama adı -->
     <string name="app_name">MiniCast</string>
 
-    <!-- Eksik olanlar: -->
-    <string name="connect_to_tv">TV&apos;ye bağlan</string>
+    <!-- Düzeltildi: &apos; yerine doğrudan tek tırnak -->
+    <string name="connect_to_tv">TV'ye bağlan</string>
     <string name="go">Git</string>
 </resources>
