@@ -1,42 +1,21 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.minicast">
+<application
+    android:allowBackup="true"
+    android:label="@string/app_name"
+    android:icon="@mipmap/ic_launcher"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    android:supportsRtl="true"
+    android:theme="@style/Theme.MiniCast">   <!-- Uygulama geneli AppCompat -->
 
-    <!-- Ağ izinleri -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- LAUNCHER aktivite: Splash da AppCompat kökenli -->
+    <activity
+        android:name=".MainActivity"
+        android:exported="true"
+        android:theme="@style/Theme.MiniCast.Splash">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent-filter>
+    </activity>
 
-    <application
-        android:allowBackup="true"
-        android:label="@string/app_name"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.MiniCast">
-
-        <!-- Google Cast seçenek sağlayıcısı -->
-        <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.example.minicast.MyCastOptionsProvider" />
-
-        <!-- Genişletilmiş kontroller (Cast) -->
-        <activity
-            android:name=".ExpandedControlsActivity"
-            android:exported="false" />
-
-        <!-- LAUNCHER aktivite (Splash teması ile açılır) -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.MiniCast.Splash">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-        </activity>
-
-    </application>
-</manifest>
+    <!-- Cast meta-data vb. diğer öğeleriniz burada -->
+</application>
