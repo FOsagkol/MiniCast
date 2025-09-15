@@ -221,10 +221,10 @@ public class MainActivity extends AppCompatActivity {
     private void startDlnaScan() {
         DlnaDiscovery.discover(this, new DlnaDiscovery.Listener() {
             @Override public void onDeviceFound(DlnaDevice device) {
-                runOnUiThread(() -> addDeviceIfNew(device.getUsn() != null ? "DLNA:" + device.getUsn()
-                                                                           : "DLNA:" + device.getFriendlyName(),
-                                                   device.getFriendlyName(),
-                                                   device));
+                runOnUiThread(() -> addDeviceIfNew(
+                        device.getUsn() != null ? "DLNA:" + device.getUsn() : "DLNA:" + device.getFriendlyName(),
+                        device.getFriendlyName(),
+                        device));
             }
 
             @Override public void onDone() {
@@ -234,7 +234,8 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
 
-            @Override public void onError(Exception e) {
+            // Arayüzde onError tanımı yoksa @Override kaldırılmalı
+            public void onError(Exception e) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         "DLNA hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
                         Toast.LENGTH_LONG).show());
@@ -262,7 +263,8 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
 
-            @Override public void onError(Exception e) {
+            // Arayüzde onError tanımı yoksa @Override kaldırılmalı
+            public void onError(Exception e) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         "Cast keşif hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
                         Toast.LENGTH_LONG).show());
@@ -413,3 +415,4 @@ public class MainActivity extends AppCompatActivity {
         if (u.contains(".mp4"))  return "video/mp4";
         return "video/*";
     }
+}
