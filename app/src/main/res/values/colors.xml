@@ -6,6 +6,9 @@
     <color name="mc_white">#FFFFFF</color>
     <color name="mc_grey">#2A2A2A</color>
 
+    <!-- Eksik olan launcher background -->
+    <color name="ic_launcher_background">@color/mc_orange</color>
+
     <!-- Material renk eşlemeleri -->
     <color name="colorPrimary">@color/mc_orange</color>
     <color name="colorPrimaryVariant">@color/mc_orange_dark</color>
