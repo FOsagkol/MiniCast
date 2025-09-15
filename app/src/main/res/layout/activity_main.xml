@@ -1,57 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
 
+    <!-- Dikey ana kolon -->
     <LinearLayout
         android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <!-- Üst çubuk -->
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="?attr/actionBarSize"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             app:title="@string/app_name"
-            app:menu="@menu/main_menu"/>
+            app:titleCentered="false"
+            app:menu="@menu/main_menu"
+            app:layout_scrollFlags="scroll|enterAlways"
+            tools:targetApi="lollipop" />
 
+        <!-- İnce URL barı -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="8dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
             android:orientation="horizontal">
 
             <EditText
                 android:id="@+id/urlInput"
                 android:layout_width="0dp"
+                android:layout_height="36dp"
                 android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:hint="https://"/>
+                android:hint="https://"
+                android:inputType="textUri"
+                android:singleLine="true"
+                android:ellipsize="middle"
+                android:imeOptions="actionGo"
+                android:importantForAutofill="no"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textSize="12sp" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/goBtn"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Git"/>
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:minWidth="64dp"
+                android:text="@string/go"
+                android:contentDescription="@string/go"
+                app:cornerRadius="8dp" />
         </LinearLayout>
 
+        <!-- Web içeriği -->
         <WebView
             android:id="@+id/web"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"/>
+            android:layout_weight="1"
+            android:overScrollMode="never"
+            tools:url="https://www.google.com" />
     </LinearLayout>
 
-    <!-- İstersen görünür tek tuş için kullan; MainActivity bu id'yi opsiyonel kullanıyor -->
+    <!-- Tek buton: TV'ye bağlan -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabTv"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        android:contentDescription="TV'ye bağlan"
+        android:text="@string/tv"
+        android:contentDescription="@string/connect_to_tv"
+        android:layout_gravity="bottom|end"
         app:icon="@android:drawable/ic_media_play"
         app:iconTint="@android:color/white"
-        android:text="TV"
-        android:layout_gravity="bottom|end"/>
+        tools:ignore="RtlHardcoded" />
 </FrameLayout>
