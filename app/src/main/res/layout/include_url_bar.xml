@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/urlCard"
+    android:layout_width="match_parent"
+    android:layout_height="36dp"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginBottom="4dp"
+    android:foreground="?android:attr/selectableItemBackground"
+    android:cardBackgroundColor="@color/mc_grey"
+    android:padding="6dp">
+
+    <EditText
+        android:id="@+id/urlInput"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent"
+        android:textColor="@color/mc_white"
+        android:textColorHint="#99FFFFFF"
+        android:hint="mini.cast"
+        android:singleLine="true"
+        android:ellipsize="middle"
+        android:maxLines="1"
+        android:inputType="textUri"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"/>
+</com.google.android.material.card.MaterialCardView>
