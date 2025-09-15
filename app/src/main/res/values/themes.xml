@@ -1,6 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Uygulama ana teması: Material3 -->
+    <!-- Uygulama ana teması: AppCompat/Material 3 -->
     <style name="Theme.MiniCast" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryContainer">@color/colorPrimaryVariant</item>
