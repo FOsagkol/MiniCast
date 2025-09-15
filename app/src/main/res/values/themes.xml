@@ -9,6 +9,5 @@
         <item name="android:navigationBarColor">@color/mc_black</item>
         <item name="android:windowBackground">@color/mc_black</item>
         <!-- Dinamik renkleri (Android 12+) kapat: mor gelmesin -->
-        <item name="material3.dynamicColor">false</item>
     </style>
 </resources>
