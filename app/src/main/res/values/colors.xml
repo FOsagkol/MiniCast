@@ -7,25 +7,18 @@
     <color name="mc_white">#FFFFFF</color>
     <color name="mc_grey">#2A2A2A</color>
 
-    <!-- Splash katmanları için ek turuncu tonlar (minicast_orange_layers.xml kullanır) -->
-    <color name="mc_orange_900">#FF6A00</color>
-    <color name="mc_orange_800">#FF78000</color>
-    <color name="mc_orange_700">#FF8600</color>
-    <color name="mc_orange_600">#FF9400</color>
-    <color name="mc_orange_500">#FFA200</color>
-    <color name="mc_orange_400">#FFB000</color>
-
-    <!-- Eksik olan launcher background -->
-    <color name="ic_launcher_background">@color/mc_orange</color>
+    <!-- Launcher background -->
+    <!-- DÜZELTME: @color referansı yerine literal hex -->
+    <color name="ic_launcher_background">#FF8A00</color>
 
     <!-- Material renk eşlemeleri -->
-    <color name="colorPrimary">@color/mc_orange</color>
-    <color name="colorPrimaryVariant">@color/mc_orange_dark</color>
-    <color name="colorOnPrimary">@color/mc_white</color>
-    <color name="colorSecondary">@color/mc_black</color>
-    <color name="colorOnSecondary">@color/mc_white</color>
-    <color name="colorBackground">@color/mc_black</color>
-    <color name="colorOnBackground">@color/mc_white</color>
-    <color name="colorSurface">@color/mc_black</color>
-    <color name="colorOnSurface">@color/mc_white</color>
+    <color name="colorPrimary">#FF8A00</color>
+    <color name="colorPrimaryVariant">#E67600</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+    <color name="colorSecondary">#121212</color>
+    <color name="colorOnSecondary">#FFFFFF</color>
+    <color name="colorBackground">#121212</color>
+    <color name="colorOnBackground">#FFFFFF</color>
+    <color name="colorSurface">#121212</color>
+    <color name="colorOnSurface">#FFFFFF</color>
 </resources>
