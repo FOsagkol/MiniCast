@@ -28,7 +28,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.mediarouter.media.MediaRouter;
 
 import com.example.minicast.devices.CastDeviceWrapper;
@@ -56,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView web;
     private EditText urlInput;
     private Button goBtn;
-    private ImageButton btnCast; // FAB yerine ImageButton
+    private ImageButton btnCast; // Görsel TV butonu
 
     private View urlCard;
     private int urlCollapsedHeightPx, urlExpandedHeightPx;
@@ -75,6 +74,19 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Android 12+ sistem Splash: çıkışta fade-out (1.2 sn)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSplashScreen().setOnExitAnimationListener(splashView -> {
+                splashView.getIconView().setAlpha(1f);
+                splashView.getIconView().animate()
+                        .alpha(0f)
+                        .setDuration(1200L)
+                        .withEndAction(splashView::remove)
+                        .start();
+            });
+        }
+
         setContentView(R.layout.activity_main);
 
         toolbar = findViewById(R.id.toolbar);
@@ -97,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Cast Framework
         try { CastContext.getSharedInstance(this); } catch (Throwable ignore) {}
 
         // Yeni ImageButton
@@ -104,12 +117,6 @@ public class MainActivity extends AppCompatActivity {
         if (btnCast != null) {
             btnCast.setOnClickListener(v -> startUnifiedDiscovery());
         }
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (!isLocationServiceEnabled()) { }
     }
 
     @Override
@@ -451,4 +458,4 @@ public class MainActivity extends AppCompatActivity {
         if (u.contains(".mp4"))  return "video/mp4";
         return "video/*";
     }
-}
+                }
