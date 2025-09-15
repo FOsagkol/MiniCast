@@ -33,7 +33,7 @@
             layout="@layout/include_url_bar" />
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- İçerik: WebView (AppBar ile senkron scroll için behavior zorunlu) -->
+    <!-- İçerik: WebView -->
     <WebView
         android:id="@+id/web"
         android:layout_width="match_parent"
@@ -42,17 +42,16 @@
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
         tools:url="https://www.google.com" />
 
-    <!-- TV'ye bağlan butonu -->
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
-        android:id="@+id/fabTv"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/tv"
-        android:contentDescription="@string/connect_to_tv"
+    <!-- TV'ye bağlan butonu (yeni görsel buton) -->
+    <ImageButton
+        android:id="@+id/btnCast"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
-        app:icon="@android:drawable/ic_media_play"
-        app:iconTint="@android:color/white"
-        app:layout_anchor="@id/rootCoordinator"
-        app:layout_anchorGravity="bottom|end" />
+        android:background="@android:color/transparent"
+        android:src="@drawable/btn_cast"
+        android:contentDescription="@string/connect_to_tv"
+        android:tint="@null" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
