@@ -7,11 +7,14 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MiniCast">
+        android:theme="@style/Theme.MiniCast"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
 
         <!-- Google Cast seçenek sağlayıcısı -->
         <meta-data
@@ -22,9 +25,11 @@
             android:name=".ExpandedControlsActivity"
             android:exported="false" />
 
+        <!-- LAUNCHER aktivite: Android 12+ Splash çıkışı için Splash teması bağlandı -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@style/Theme.MiniCast.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
