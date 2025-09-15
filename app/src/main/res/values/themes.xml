@@ -11,14 +11,14 @@
         <item name="android:statusBarColor">@color/mc_black</item>
         <item name="android:navigationBarColor">@color/mc_black</item>
         <item name="android:windowBackground">@color/mc_black</item>
-        <!-- İsterseniz dinamik renkleri (Android 12+) kapatabilirsiniz:
-             <item name="material3.dynamicColor">false</item> -->
+        <!-- <item name="material3.dynamicColor">false</item> -->
     </style>
 
-    <!-- Android 12+ sistem Splash teması: 5 katmanlı turuncu arka plan + şeffaf foreground -->
+    <!-- Android 12+ sistem Splash teması -->
     <style name="Theme.MiniCast.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@drawable/minicast_orange_layers</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/minicast_logo_foreground</item>
+        <!-- DÜZELTME: mipmap -> drawable -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/minicast_logo_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.MiniCast</item>
     </style>
 
