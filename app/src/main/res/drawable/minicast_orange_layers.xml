@@ -12,9 +12,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:type="radial"
-                android:gradientRadius="60%p"
-                android:centerX="50%p"
-                android:centerY="45%p"
+                android:gradientRadius="0.6"
+                android:centerX="0.5"
+                android:centerY="0.45"
                 android:startColor="#FFFFAF3A"
                 android:centerColor="#FFFF9322"
                 android:endColor="#00FF8A00"/>
@@ -26,9 +26,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:type="radial"
-                android:gradientRadius="55%p"
-                android:centerX="80%p"
-                android:centerY="20%p"
+                android:gradientRadius="0.55"
+                android:centerX="0.8"
+                android:centerY="0.2"
                 android:startColor="#FFFFB74A"
                 android:endColor="#00FF8A00"/>
         </shape>
@@ -39,9 +39,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:type="radial"
-                android:gradientRadius="70%p"
-                android:centerX="18%p"
-                android:centerY="78%p"
+                android:gradientRadius="0.7"
+                android:centerX="0.18"
+                android:centerY="0.78"
                 android:startColor="#FFFF9A2E"
                 android:endColor="#00FF8A00"/>
         </shape>
@@ -52,9 +52,9 @@
         <shape android:shape="rectangle">
             <gradient
                 android:type="radial"
-                android:gradientRadius="90%p"
-                android:centerX="50%p"
-                android:centerY="50%p"
+                android:gradientRadius="0.9"
+                android:centerX="0.5"
+                android:centerY="0.5"
                 android:startColor="#00E67100"
                 android:endColor="#80D76800"/>
         </shape>
