@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;                // urlCard artık View
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
@@ -40,7 +41,7 @@ import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.card.MaterialCardView;
+// import com.google.android.material.card.MaterialCardView; // GEREK YOK
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
 import java.util.ArrayList;
@@ -58,10 +59,10 @@ public class MainActivity extends AppCompatActivity {
     private Button goBtn;
     private ExtendedFloatingActionButton fabTv;
 
-    // --- EKLENEN ALANLAR (URL bar davranışı) ---
-    private MaterialCardView urlCard;
+    // --- URL bar alanları (A seçeneği: XML sabit, id: urlBar) ---
+    private View urlCard; // MaterialCardView yerine View
     private int urlCollapsedHeightPx, urlExpandedHeightPx;
-    // -------------------------------------------
+    // ------------------------------------------------------------
 
     private final List<Object> foundDevices = new ArrayList<>();
     private final Set<String> seenKeys = new HashSet<>();
@@ -83,12 +84,13 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
 
         // URL bar / WebView
-        urlCard = findViewById(R.id.urlCard);    // EKLENDİ
+        urlCard  = findViewById(R.id.urlBar);   // A seçeneği: urlBar
         urlInput = findViewById(R.id.urlInput);
-        goBtn = findViewById(R.id.goBtn);
-        web = findViewById(R.id.web);
+        goBtn    = findViewById(R.id.goBtn);
+        web      = findViewById(R.id.web);
+
         setupWebView();
-        setupUrlBar(); // EKLENDİ
+        setupUrlBar();
 
         goBtn.setOnClickListener(v -> {
             String url = urlInput.getText().toString().trim();
@@ -98,13 +100,12 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Cast Framework'u erkenden ayağa kaldır (oturum yönetimi için)
+        // Cast Framework’u erkenden ayağa kaldır
         try { CastContext.getSharedInstance(this); } catch (Throwable ignore) {}
 
         fabTv = findViewById(R.id.fabTv);
         if (fabTv != null) {
             fabTv.setOnClickListener(v -> startUnifiedDiscovery());
-            // FIX: ContextCompat ile güvenli renk alma
             fabTv.setBackgroundTintList(
                     android.content.res.ColorStateList.valueOf(
                             ContextCompat.getColor(this, R.color.tv_ready_bg)));
@@ -115,7 +116,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        // FIX: Ayarlardan geri dönüldüğünde konum hâlâ kapalı ise kullanıcıyı bilgilendir.
         if (!isLocationServiceEnabled()) {
             // Sessiz bilgi; butona basınca yine yönlendireceğiz.
         }
@@ -123,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onStop() {
-        // FIX: Activity görünmezken tüm keşifleri/diyalogları kapat
         safeDismissDeviceDialog();
         stopCastDiscovery();
         super.onStop();
@@ -131,7 +130,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // FIX: Ek güvenlik
         safeDismissDeviceDialog();
         stopCastDiscovery();
         super.onDestroy();
@@ -157,7 +155,7 @@ public class MainActivity extends AppCompatActivity {
         web.loadUrl("https://www.google.com");
     }
 
-    // --- EKLENEN METOT: İnce URL bar odak/ellipsize davranışı ---
+    // İnce URL bar odak/ellipsize davranışı — XML’e dokunmadan çalışır
     @SuppressLint("ClickableViewAccessibility")
     private void setupUrlBar() {
         if (urlCard == null || urlInput == null) return;
@@ -166,21 +164,19 @@ public class MainActivity extends AppCompatActivity {
         urlCollapsedHeightPx = (int) (36 * d);
         urlExpandedHeightPx  = (int) (48 * d);
 
-        // Odak kazanırsa: genişlet + tüm URL’i göster
         urlInput.setOnFocusChangeListener((v, hasFocus) -> {
             ViewGroup.LayoutParams lp = urlCard.getLayoutParams();
             lp.height = hasFocus ? urlExpandedHeightPx : urlCollapsedHeightPx;
             urlCard.setLayoutParams(lp);
 
             if (hasFocus) {
-                urlInput.setEllipsize(null);          // tam göster
+                urlInput.setEllipsize(null);  // tam göster
                 urlInput.selectAll();
             } else {
                 urlInput.setEllipsize(TextUtils.TruncateAt.MIDDLE); // kısalt
             }
         });
 
-        // Kartın boş alanına tıklayınca da odak ver
         urlCard.setOnClickListener(v -> {
             urlInput.requestFocus();
             urlInput.post(() -> {
@@ -197,7 +193,6 @@ public class MainActivity extends AppCompatActivity {
         urlInput.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         urlInput.setSingleLine(true);
     }
-    // ------------------------------------------------------------
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -216,7 +211,6 @@ public class MainActivity extends AppCompatActivity {
 
     /** Tek tuş: önce izin/konum, sonra Chromecast + DLNA paralel keşif */
     private void startUnifiedDiscovery() {
-        // FIX: Her girişte temiz state
         resetDiscoveryState();
 
         if (!ensureDiscoveryPermissionAndLocation()) return;
@@ -247,7 +241,6 @@ public class MainActivity extends AppCompatActivity {
         dlnaDone = false;
         castDone = false;
         pendingTarget = null;
-        // Var ise eski dialog'u kapat
         safeDismissDeviceDialog();
     }
 
@@ -289,7 +282,6 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, perms, grants);
         if (requestCode == REQ_LOC) {
             if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) {
-                // FIX: İzin verildi → tek giriş noktasından akışı tekrar başlat
                 startUnifiedDiscovery();
             } else {
                 Toast.makeText(this, "Konum izni verilmeden cihazlar listelenemez", Toast.LENGTH_SHORT).show();
@@ -315,7 +307,6 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
 
-            // onError @Override olmadan bırakıldı (arayüz destekliyorsa çalışır)
             public void onError(Exception e) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
                         "DLNA hata: " + (e != null ? e.getMessage() : "bilinmeyen"),
@@ -365,4 +356,138 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void safeDismissDeviceDialog() {
-        if (
+        if (deviceDialog != null && deviceDialog.isShowing()) {
+            try { deviceDialog.dismiss(); } catch (Throwable ignore) {}
+        }
+        deviceDialog = null;
+        deviceAdapter = null;
+    }
+
+    /* --------------------- DİYALOG / LİSTE --------------------- */
+
+    private void addDeviceIfNew(String key, String displayName, Object deviceObj) {
+        if (key == null || displayName == null || deviceObj == null) return;
+        if (!seenKeys.add(key)) return;
+
+        foundDevices.add(deviceObj);
+        if (deviceAdapter != null) {
+            deviceAdapter.add(displayName);
+            deviceAdapter.notifyDataSetChanged();
+        }
+        updateDialogTitle();
+    }
+
+    private void updateDialogTitle() {
+        if (deviceDialog == null || !deviceDialog.isShowing()) return;
+        boolean any = !foundDevices.isEmpty();
+        boolean allDone = dlnaDone && castDone;
+        if (!any && !allDone) {
+            deviceDialog.setTitle("Cihazlar aranıyor…");
+        } else if (any && !allDone) {
+            deviceDialog.setTitle("Cihazlar (aranıyor…)");
+        } else {
+            deviceDialog.setTitle(any ? "Cihaz seçin" : "Cihaz bulunamadı");
+        }
+    }
+
+    /* ----------------------- SEÇİM / OYNAT --------------------- */
+
+    private void onDeviceChosen(Object device) {
+        if (device instanceof CastDeviceWrapper) {
+            CastDeviceWrapper wrapper = (CastDeviceWrapper) device;
+            MediaRouter mediaRouter = MediaRouter.getInstance(getApplicationContext());
+            if (wrapper.getRoute() != null) {
+                mediaRouter.selectRoute(wrapper.getRoute());
+                Toast.makeText(this, "Chromecast seçildi, bağlantı kuruluyor…", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Chromecast route bilgisi yok.", Toast.LENGTH_SHORT).show();
+            }
+            pendingTarget = device;
+            requestPageVideoUrl();
+            return;
+        }
+
+        if (device instanceof DlnaDevice) {
+            pendingTarget = device;
+            requestPageVideoUrl();
+        }
+    }
+
+    private void requestPageVideoUrl() {
+        String js = "javascript:(function(){try{"
+                + "var v=document.querySelector('video');"
+                + "var u=v?(v.currentSrc||v.src||''):'';"
+                + "if(!u&&v){var s=v.querySelector('source'); if(s) u=s.src;}"
+                + "MiniCast.onVideoSelected(u||'');"
+                + "}catch(e){MiniCast.onVideoSelected('');}})();";
+        web.evaluateJavascript(js, null);
+    }
+
+    private class JsBridge {
+        @JavascriptInterface
+        public void onVideoSelected(String url) {
+            runOnUiThread(() -> {
+                if (pendingTarget == null) {
+                    Toast.makeText(MainActivity.this, "Cihaz seçilmedi.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (TextUtils.isEmpty(url) || url.startsWith("blob:")) {
+                    Toast.makeText(MainActivity.this, "Bu video (DRM/blob) aktarılamıyor.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+
+                if (pendingTarget instanceof DlnaDevice) {
+                    DlnaDevice d = (DlnaDevice) pendingTarget;
+                    new Thread(() -> {
+                        boolean ok = DlnaDiscovery.setUriAndPlay(d.getControlUrl(), url);
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                                ok ? "TV’de oynatılıyor" : "DLNA oynatma başarısız",
+                                Toast.LENGTH_SHORT).show());
+                    }).start();
+                } else if (pendingTarget instanceof CastDeviceWrapper) {
+                    tryCastLoad(url);
+                }
+            });
+        }
+    }
+
+    private void tryCastLoad(String url) {
+        try {
+            CastContext cc = CastContext.getSharedInstance(this);
+            CastSession session = (cc != null) ? cc.getSessionManager().getCurrentCastSession() : null;
+            if (session == null || session.getRemoteMediaClient() == null) {
+                Toast.makeText(this, "Cast oturumu hazır değil; bağlandıktan sonra tekrar deneyin.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            String contentType = guessContentType(url);
+
+            MediaMetadata md = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
+            md.putString(MediaMetadata.KEY_TITLE, "MiniCast");
+
+            MediaInfo mediaInfo = new MediaInfo.Builder(url)
+                    .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+                    .setContentType(contentType)
+                    .setMetadata(md)
+                    .build();
+
+            MediaLoadRequestData req = new MediaLoadRequestData.Builder()
+                    .setMediaInfo(mediaInfo)
+                    .build();
+
+            session.getRemoteMediaClient().load(req);
+            Toast.makeText(this, "Chromecast’e gönderildi", Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "Cast yükleme hatası: " + t.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String guessContentType(String url) {
+        String u = url.toLowerCase();
+        if (u.contains(".m3u8")) return "application/x-mpegurl";
+        if (u.contains(".mpd"))  return "application/dash+xml";
+        if (u.contains(".webm")) return "video/webm";
+        if (u.contains(".mp4"))  return "video/mp4";
+        return "video/*";
+    }
+    }
