@@ -1,28 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/urlCard"
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="36dp"
-    android:layout_marginStart="12dp"
-    android:layout_marginEnd="12dp"
-    android:layout_marginTop="8dp"
-    android:layout_marginBottom="4dp"
-    android:foreground="?android:attr/selectableItemBackground"
-    android:cardBackgroundColor="@color/mc_grey"
-    android:padding="6dp">
+    android:layout_height="48dp"
+    android:layout_margin="8dp"
+    app:cardUseCompatPadding="true"
+    app:cardElevation="2dp"
+    app:cardCornerRadius="12dp"
+    app:cardBackgroundColor="@android:color/white">
 
-    <EditText
-        android:id="@+id/urlInput"
+    <!-- İnce URL bar içeriği -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@android:color/transparent"
-        android:textColor="@color/mc_white"
-        android:textColorHint="#99FFFFFF"
-        android:hint="mini.cast"
-        android:singleLine="true"
-        android:ellipsize="middle"
-        android:maxLines="1"
-        android:inputType="textUri"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"/>
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:orientation="horizontal">
+
+        <!-- Kısaltılmış URL metni -->
+        <TextView
+            android:id="@+id/tvUrlShort"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="https://mini…/cast"
+            android:textSize="14sp"/>
+
+        <!-- Tam URL’i göstermek için buton -->
+        <ImageButton
+            android:id="@+id/btnExpandUrl"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/show_full_url"
+            android:src="@android:drawable/arrow_down_float"/>
+    </LinearLayout>
+
 </com.google.android.material.card.MaterialCardView>
