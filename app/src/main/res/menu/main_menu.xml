@@ -1,9 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
       xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Resmi Google Cast butonu; kendi ikonunu sağlar -->
     <item
-        android:id="@+id/action_connect_tv"
-        android:title="TV'ye bağlan"
-        android:icon="@android:drawable/stat_sys_data_bluetooth"
-        app:showAsAction="always" />
+        android:id="@+id/action_cast"
+        android:title="Cast"
+        app:actionProviderClass="androidx.mediarouter.app.MediaRouteActionProvider"
+        app:showAsAction="always"/>
+
+    <!-- Smart View / DLNA tarama – güvenli, kendi vektör ikonumuzla -->
+    <item
+        android:id="@+id/action_smartview"
+        android:title="Smart View"
+        android:icon="@drawable/ic_smartview"
+        app:showAsAction="always"/>
 </menu>
