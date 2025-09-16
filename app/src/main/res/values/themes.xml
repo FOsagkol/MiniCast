@@ -1,8 +1,9 @@
-<!-- app/src/main/res/values/themes.xml — Seçenek A (AndroidX SplashScreen) ile uyumlu -->
+<!-- app/src/main/res/values/themes.xml — Adım 3: Tema zinciri doğrulandı -->
 <resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- 1) Ana Material3 tabanlı tema -->
     <style name="Theme.MiniCast.Base" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Renkler projedeki colors.xml ile eşleşmeli -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryContainer">@color/colorPrimaryVariant</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
@@ -12,18 +13,22 @@
         <item name="android:statusBarColor">@color/mc_black</item>
         <item name="android:navigationBarColor">@color/mc_black</item>
         <item name="android:windowBackground">@color/mc_black</item>
-        <!-- İstersen: <item name="material3.dynamicColor">false</item> -->
+        <!-- İsteğe bağlı:
+        <item name="material3.dynamicColor">false</item>
+        -->
     </style>
 
-    <!-- 2) Splash teması -->
+    <!-- 2) Splash teması (yalnızca açılışta) -->
     <style name="Theme.MiniCast.Splash" parent="Theme.MiniCast.Base">
-        <!-- Android 12+ SplashScreen öznitelikleri (androidx.core:core-splashscreen ile) -->
+        <!-- AndroidX SplashScreen öznitelikleri -->
         <item name="windowSplashScreenBackground">@drawable/minicast_orange_layers</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/minicast_logo_foreground</item>
-        <!-- Splash sonrası kalıcı tema -->
-        <item name="postSplashScreenTheme">@style/Theme.MiniCast.Base</item>
+        <!-- Splash sonrası kullanılacak KALICI tema:
+             Zincir bütünlüğü için Base yerine app teması işaretlenir -->
+        <item name="postSplashScreenTheme">@style/Theme.MiniCast</item>
     </style>
 
-    <!-- 3) Uygulamanın genel teması -->
-    <style name="Theme.MiniCast" parent="Theme.MiniCast.Base"/>
+    <!-- 3) Uygulamanın genel (kalıcı) teması -->
+    <style name="Theme.MiniCast" parent="Theme.MiniCast.Base" />
+
 </resources>
