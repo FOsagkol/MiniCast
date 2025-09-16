@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
             v.put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain");
             Uri uri = getContentResolver()
                     .insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-            if (uri != null) {
+        if (uri != null) {
                 try (java.io.OutputStream os =
                              getContentResolver().openOutputStream(uri, "wa")) {
                     os.write(text.getBytes(StandardCharsets.UTF_8));
@@ -249,12 +249,15 @@ public class MainActivity extends AppCompatActivity {
 
         scanCancelled = false;
         new Thread(() -> {
+            // NOT: Bu liste artik "effectively final". Reassign YOK; icerik dolduruluyor.
             List<DlnaDevice> list = new ArrayList<>();
             try {
                 acquireMl(true);
-                list = DlnaScanner.scanExtended(6000, (st, sent) -> dbg("SSDP sent: " + st),
+                List<DlnaDevice> scanned = DlnaScanner.scanExtended(6000,
+                        (st, sent) -> dbg("SSDP sent: " + st),
                         (from, usn, loc) -> dbg("SSDP resp from " + from + " usn=" + usn + " loc=" + loc),
                         () -> scanCancelled);
+                if (scanned != null) list.addAll(scanned); // ✱ reassign yerine mutate
             } catch (Throwable e) {
                 dbg("DLNA scan error", e);
             } finally {
@@ -269,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            final List<DlnaDevice> devices = good;
+            final List<DlnaDevice> devices = good; // final
             runOnUiThread(() -> {
                 if (progressDialog.isShowing()) progressDialog.dismiss();
                 if (scanCancelled) {
@@ -277,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 if (devices.isEmpty()) {
-                    showNoDeviceFoundSheet(list); // ham liste ile opsiyonlar
+                    showNoDeviceFoundSheet(list); // "list" reassign edilmediği için lambda -> OK
                 } else if (devices.size() == 1) {
                     DlnaDevice sel = devices.get(0);
                     selectedDevice = sel;
@@ -773,7 +776,9 @@ public class MainActivity extends AppCompatActivity {
     }
     private void acquireMl(boolean on) {
         if (mlock == null) return;
-        try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); }
-        catch (Throwable ignored) {}
+        try {
+            if (on && !mlock.isHeld()) mlock.acquire();
+            else if (!on && mlock.isHeld()) mlock.release();
+        } catch (Throwable ignored) {}
     }
-            }
+                                }
