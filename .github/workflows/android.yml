@@ -42,7 +42,7 @@ jobs:
       - name: Merge & process resources (debug)
         run: ./gradlew :app:clean :app:mergeDebugResources :app:processDebugResources --stacktrace --info --no-daemon
 
-      # Teşhis görevleri (app/build.gradle içine eklediğiniz copyMergedResForDiag ve diagSplashAttrs görevlerini çağırır)
+      # Teşhis görevleri (app/build.gradle içindeki copyMergedResForDiag ve diagSplashAttrs)
       - name: Run diagnostics (debug)
         run: ./gradlew :app:copyMergedResForDiag :app:diagSplashAttrs --stacktrace --info --no-daemon
 
@@ -76,7 +76,7 @@ jobs:
           cache-read-only: false
           add-job-summary: 'never'
 
-      # (Kullanıcının mevcut akışındaki “Verify Gradle wrapper on runner” adımını koruyoruz)
+      # Mevcut akıştaki doğrulama adımı
       - name: Verify Gradle wrapper on runner
         run: |
           ls -l gradle/wrapper || true
