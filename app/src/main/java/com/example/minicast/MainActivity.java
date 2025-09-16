@@ -11,7 +11,6 @@ import android.view.View;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-
 import android.widget.ImageButton;
 import android.widget.Toast;
 
@@ -26,15 +25,9 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 
 /**
- * MiniCast – sade Activity
+ * MiniCast – Activity
  * - Çift log: app-özel dosya + Downloads + logcat (MiniCastCrash)
- * - Hızlı WebView açılışı
- * - CastContext init try/catch (erken init kill’lerine karşı güvenli)
- *
- * NOT: layout tarafında en azından aşağıdaki id’ler olmalı:
- *   - R.layout.activity_main
- *   - R.id.web  (WebView)
- *   - R.id.btnCast  (ImageButton)  — yoksa sorun değil, null kontrolü var.
+ * - Splash çıkışında null-safe
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -45,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
 
     /* =====================  LOG YARDIMCILARI  ===================== */
 
-    // MediaStore ile Downloads’a ek dosya düş (API 29+)
+    // MediaStore ile Downloads’a yaz (API 29+)
     private boolean writeToDownloads(String fileName, String text) {
         try {
             ContentValues v = new ContentValues();
@@ -105,31 +98,37 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 1) Global yakalayıcı: beklenmeyen hatayı hem dosyaya hem Downloads’a hem logcat’e yaz.
+        // Global yakalayıcı
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             dbg("Uncaught in thread: " + t.getName(), e);
-            try {
-                Toast.makeText(this, "Hata: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
-            } catch (Throwable ignored) {}
+            try { Toast.makeText(this, "Hata: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show(); }
+            catch (Throwable ignored) {}
         });
         dbg("onCreate: START (handler installed)");
 
-        // 2) Splash/çıkış animasyonu (Android 12+)
+        // Splash/çıkış animasyonu (Android 12+), NULL-SAFE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 getSplashScreen().setOnExitAnimationListener(splashView -> {
-                    splashView.getIconView().setAlpha(1f);
-                    splashView.remove();
+                    try {
+                        View icon = splashView.getIconView(); // Bazı cihazlarda null gelebiliyor
+                        if (icon != null) {
+                            icon.setAlpha(1f); // güvenliyse
+                        }
+                    } catch (Throwable e) {
+                        dbg("splash icon handling failed", e);
+                    } finally {
+                        try { splashView.remove(); } catch (Throwable ignored) {}
+                    }
                 });
             } catch (Throwable e) { dbg("splash listener err", e); }
         }
 
-        // 3) Arayüz
         dbg("before setContentView");
         setContentView(R.layout.activity_main);
         dbg("after setContentView");
 
-        // 4) WebView
+        // WebView
         web = findViewById(R.id.web);
         if (web != null) {
             setupWebView(web);
@@ -138,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
             dbg("WebView (R.id.web) is null!");
         }
 
-        // 5) Cast – güvenli init (hemen kill olursa try/catch)
+        // Cast – güvenli init
         try {
             CastContext.getSharedInstance(this);
             dbg("CastContext initialized");
@@ -146,13 +145,12 @@ public class MainActivity extends AppCompatActivity {
             dbg("CastContext init failed", e);
         }
 
-        // 6) Buton
+        // Buton
         btnCast = findViewById(R.id.btnCast);
         if (btnCast != null) {
             btnCast.setOnClickListener(v -> {
                 dbg("btnCast clicked");
                 Toast.makeText(this, "Cast menüsü/keşfi burada tetiklenecek.", Toast.LENGTH_SHORT).show();
-                // Burada mevcut keşif/bağlama kodunuzu çağırabilirsiniz (DLNA/Cast).
             });
         }
         dbg("onCreate: END");
