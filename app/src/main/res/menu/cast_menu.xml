@@ -2,17 +2,15 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
       xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- Resmi Google Cast butonu (yalnız Cast cihazlarını listeler) -->
     <item
-        android:id="@+id/action_cast"
+        android:id="@+id/media_route_menu_item"
         android:title="Cast"
         app:actionProviderClass="androidx.mediarouter.app.MediaRouteActionProvider"
         app:showAsAction="always"/>
 
-    <!-- Smart View (Miracast) / Ekran Yansıtma ayarını aç -->
     <item
         android:id="@+id/action_smartview"
         android:title="Smart View"
-        android:icon="@android:drawable/stat_sys_wifi"
+        android:icon="@drawable/ic_smartview"
         app:showAsAction="always"/>
 </menu>
