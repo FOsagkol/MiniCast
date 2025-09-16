@@ -1,6 +1,7 @@
+<!-- app/src/main/res/values/themes.xml — Seçenek A (AndroidX SplashScreen) ile uyumlu -->
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 1) Asıl AppCompat/Material3 temanız -->
+    <!-- 1) Ana Material3 tabanlı tema -->
     <style name="Theme.MiniCast.Base" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryContainer">@color/colorPrimaryVariant</item>
@@ -14,15 +15,15 @@
         <!-- İstersen: <item name="material3.dynamicColor">false</item> -->
     </style>
 
-    <!-- 2) Splash teması: Artık Theme.SplashScreen yerine AppCompat kökenli -->
+    <!-- 2) Splash teması -->
     <style name="Theme.MiniCast.Splash" parent="Theme.MiniCast.Base">
-        <!-- Android 12+ SplashScreen öznitelikleri -->
+        <!-- Android 12+ SplashScreen öznitelikleri (androidx.core:core-splashscreen ile) -->
         <item name="windowSplashScreenBackground">@drawable/minicast_orange_layers</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/minicast_logo_foreground</item>
-        <!-- Splash sonrası kalıcı tema yine AppCompat tabanlı -->
+        <!-- Splash sonrası kalıcı tema -->
         <item name="postSplashScreenTheme">@style/Theme.MiniCast.Base</item>
     </style>
 
-    <!-- 3) Uygulamanın genel teması ismen de bulunsun -->
+    <!-- 3) Uygulamanın genel teması -->
     <style name="Theme.MiniCast" parent="Theme.MiniCast.Base"/>
 </resources>
