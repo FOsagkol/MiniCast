@@ -19,7 +19,7 @@
         android:orientation="vertical"
         android:paddingTop="?attr/actionBarSize">
 
-        <!-- basit adres çubuğu -->
+        <!-- adres çubuğu -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="48dp"
@@ -63,7 +63,6 @@
         android:contentDescription="Yansıt / DLNA / Cast"
         app:srcCompat="@drawable/ic_smartview"
         app:tint="@android:color/white"
-        app:layout_anchorGravity="bottom|end"
         android:layout_gravity="bottom|end"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
