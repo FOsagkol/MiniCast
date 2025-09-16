@@ -2,56 +2,57 @@
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/rootCoordinator"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:layout_height="match_parent">
 
-    <!-- Üst bölümü kaydırmalı yapmak için AppBarLayout -->
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appBar"
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fitsSystemWindows="true"
-        app:liftOnScroll="true">
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurface"
+        app:title="MiniCast"
+        app:titleCentered="true"
+        app:menu="@menu/main_menu"/>
 
-        <!-- Toolbar -->
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="@color/mc_black"
-            android:theme="@style/ThemeOverlay.MaterialComponents.Dark.ActionBar"
-            app:title="@string/app_name"
-            app:titleCentered="false"
-            app:menu="@menu/main_menu"
-            app:layout_scrollFlags="scroll|enterAlways" />
-
-        <!-- İnce URL bar: ayrı layout’tan dahil ediliyor -->
-        <include
-            layout="@layout/include_url_bar" />
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <!-- İçerik: WebView -->
-    <WebView
-        android:id="@+id/web"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:overScrollMode="never"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior"
-        tools:url="https://www.google.com" />
+        android:orientation="vertical"
+        android:paddingTop="?attr/actionBarSize">
 
-    <!-- TV'ye bağlan butonu (yeni görsel buton) -->
-    <ImageButton
-        android:id="@+id/btnCast"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:background="@android:color/transparent"
-        android:src="@drawable/btn_cast"
-        android:contentDescription="@string/connect_to_tv"
-        android:tint="@null" />
+        <!-- Basit adres çubuğu -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:gravity="center_vertical">
+
+            <EditText
+                android:id="@+id/urlBox"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:hint="https://"
+                android:singleLine="true"
+                android:imeOptions="actionGo"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGo"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Git"
+                android:minWidth="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"/>
+        </LinearLayout>
+
+        <WebView
+            android:id="@+id/web"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
+    </LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
