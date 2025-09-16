@@ -1,4 +1,4 @@
-// app/build.gradle — MainActivity.java ile %100 uyumlu sürüm
+// app/build.gradle — MainActivity.java ile uyumlu + teşhis görevleri eklenmiş sürüm
 
 plugins {
     id 'com.android.application'
@@ -39,10 +39,86 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
 
-    // FAB uzun basınca Chromecast chooser için
+    // Chromecast chooser için
     implementation 'androidx.mediarouter:mediarouter:1.6.0'
     implementation 'com.google.android.gms:play-services-cast-framework:21.5.0'
 
+    // SplashScreen attribute hatalarını çözmek için
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+
     // (Opsiyonel) WebKit yardımcıları
     // implementation 'androidx.webkit:webkit:1.10.0'
+}
+
+// ---- DIAGNOSTIC TASKS FOR RESOURCE LINKING ----
+
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
+// 1) Merged values çıktısını teşhis için kopyala
+tasks.register("copyMergedResForDiag") {
+    group = "diagnostics"
+    description = "Copy merged resource values to a stable diagnostics folder."
+
+    doLast {
+        File srcDir = file("$buildDir/intermediates/merged_res/debug/values")
+        File dstDir = file("$buildDir/diagnostics/merged_values_debug")
+        if (srcDir.exists()) {
+            dstDir.mkdirs()
+            srcDir.eachFileRecurse { f ->
+                if (f.isFile()) {
+                    File rel = new File(dstDir, srcDir.toPath().relativize(f.toPath()).toString())
+                    rel.getParentFile().mkdirs()
+                    Files.copy(f.toPath(), rel.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+            println "[diag] Copied merged values -> ${dstDir}"
+        } else {
+            println "[diag][warn] Source merged values folder not found: ${srcDir}"
+        }
+    }
+}
+
+// 2) SplashScreen özniteliklerini tespit et ve satır numaralarıyla yazdır
+tasks.register("diagSplashAttrs") {
+    group = "diagnostics"
+    description = "Scan merged values for SplashScreen attributes and print occurrences with line numbers."
+
+    doLast {
+        File valuesDir = file("$buildDir/intermediates/merged_res/debug/values")
+        if (!valuesDir.exists()) {
+            println "[diag][warn] Values dir not found: ${valuesDir}"
+            return
+        }
+        List<String> keys = [
+            "windowSplashScreenBackground",
+            "windowSplashScreenAnimatedIcon",
+            "postSplashScreenTheme"
+        ]
+        int hits = 0
+        valuesDir.eachFileRecurse { f ->
+            if (f.isFile() && f.name.endsWith(".xml")) {
+                List<String> lines = f.readLines("UTF-8")
+                keys.each { key ->
+                    lines.eachWithIndex { line, idx ->
+                        if (line.contains(key)) {
+                            hits++
+                            println("[diag][HIT] ${key}  @ ${f} : ${idx + 1}")
+                            println(" -> " + line.trim())
+                        }
+                    }
+                }
+            }
+        }
+        if (hits == 0) {
+            println "[diag] No SplashScreen attributes found in merged values."
+        } else {
+            println "[diag] Total matches: ${hits}"
+        }
+    }
+}
+
+// 3) processDebugResources tamamlanınca teşhis görevlerini çalıştır
+tasks.matching { it.name == "processDebugResources" }.configureEach {
+    finalizedBy("copyMergedResForDiag", "diagSplashAttrs")
 }
