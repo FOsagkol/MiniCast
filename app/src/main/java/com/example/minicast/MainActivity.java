@@ -409,7 +409,7 @@ public class MainActivity extends AppCompatActivity {
                 String v = l.substring(i + 1).trim();
                 if ("USN".equals(k)) d.usn = v;
                 else if ("ST".equals(k)) d.st = v;
-                else if "SERVER".equals(k) d.server = v;
+                else if ("SERVER".equals(k)) d.server = v;   // <-- DÜZELTİLDİ
                 else if ("LOCATION".equals(k)) d.location = v;
             }
             return d;
@@ -441,4 +441,4 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
     }
-    }
+                                                  }
