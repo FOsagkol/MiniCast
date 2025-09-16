@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Ağ ve DLNA için gerekli izinler -->
+    <!-- Ağ ve DLNA/SSDP için gerekli izinler -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
@@ -16,17 +16,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MiniCast">
 
-        <!-- Google Cast framework için gerekli meta-data -->
+        <!-- Google Cast framework seçenek sağlayıcısı -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.example.minicast.MyCastOptionsProvider" />
 
-        <!-- Cast için genişletilmiş kontroller -->
+        <!-- (İsteğe bağlı) Cast genişletilmiş kontroller ekranı -->
         <activity
             android:name=".ExpandedControlsActivity"
             android:exported="false" />
 
-        <!-- Uygulama giriş noktası -->
+        <!-- Giriş noktası -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
