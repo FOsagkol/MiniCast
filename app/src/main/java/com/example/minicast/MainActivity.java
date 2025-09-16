@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -14,6 +15,7 @@ import android.os.Bundle;
 import android.os.Message;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.InputType;
 import android.util.Log;
 import android.view.View;
 import android.webkit.JavascriptInterface;
@@ -24,9 +26,10 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -62,8 +65,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** MiniCast – Tek FAB (sağ-alt): DLNA push (HLS en yüksek kalite), yoksa Smart View; uzun bas: Cast chooser.
- *  WebView dışa kaçmıyor; m3u8/mp4/mpd ağ istekleri yakalanıyor (iframe’ler dahil). */
+/** MiniCast – DLNA push (genişletilmiş tarama + test klip), Smart View, Chromecast */
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MiniCastCrash";
@@ -77,14 +79,18 @@ public class MainActivity extends AppCompatActivity {
     private EditText urlBox;
     private FloatingActionButton fab;
 
-    private WifiManager.MulticastLock mlock;
-
     // DLNA hedefi
     private DlnaDevice selectedDevice;
 
     // Ağdan yakalanan medya URL adayları
     private final Set<String> mediaCandidates = new LinkedHashSet<>();
     private volatile String lastMediaUrl = null;
+
+    // Multicast lock (tarama sırasında)
+    private WifiManager.MulticastLock mlock;
+
+    // Tarama iptal kontrolü
+    private volatile boolean scanCancelled = false;
 
     /* ===== Logger: Downloads + app-özel + logcat ===== */
     private boolean writeToDownloads(String fileName, String text) {
@@ -127,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
                     (e != null ? Log.getStackTraceString(e) : "") + "\n";
             writeToDownloads("minicast_crash.txt", payload);
         } catch (Throwable ignore) {}
-        try { SystemClock.sleep(50); } catch (Throwable ignored) {}
+        try { SystemClock.sleep(20); } catch (Throwable ignored) {}
     }
     private void dbg(String msg) { dbg(msg, null); }
 
@@ -157,7 +163,6 @@ public class MainActivity extends AppCompatActivity {
 
         setupWebView(web);
 
-        // İlk URL
         if (urlBox.getText().length() == 0)
             urlBox.setText("https://www.google.com");
         web.loadUrl(urlBox.getText().toString());
@@ -165,30 +170,27 @@ public class MainActivity extends AppCompatActivity {
         btnGo.setOnClickListener(v -> {
             String u = urlBox.getText().toString().trim();
             if (!u.startsWith("http")) u = "https://" + u;
-            mediaCandidates.clear(); lastMediaUrl = null; // yeni sayfa -> temizle
+            mediaCandidates.clear(); lastMediaUrl = null;
             web.loadUrl(u);
         });
 
-        // FAB: tek tık => YOL SEÇİCİ (DLNA test / Smart View / Chromecast), uzun bas => direkt Cast chooser
+        // FAB: kısa bas = yol seçici; uzun bas = direkt Chromecast chooser
         fab.setOnClickListener(v -> showRoutePicker());
         fab.setOnLongClickListener(v -> { openCastChooser(); return true; });
 
-        // Cast context (güvenli)
         try { CastContext.getSharedInstance(this); } catch (Throwable e) { dbg("CastContext init failed", e); }
 
         ensureFineLocation();
 
-        // DLNA için MulticastLock
+        // Multicast lock hazırla (tarama anında acquire/release edeceğiz)
         try {
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             if (wm != null) {
                 mlock = wm.createMulticastLock("minicast-dlna");
-                mlock.setReferenceCounted(true);
-                mlock.acquire();
+                mlock.setReferenceCounted(false);
             }
-        } catch (Throwable e) { dbg("multicast lock failed", e); }
+        } catch (Throwable e) { dbg("multicast lock prepare failed", e); }
 
-        // Web’e JS arayüzü (video varsa yakalayalım)
         web.addJavascriptInterface(new JsBridge(), "MiniCastBridge");
     }
 
@@ -197,8 +199,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    /* ===================== Yol seçici (DLNA test / Smart View / Cast) ===================== */
-
+    /* ===================== Yol seçici ===================== */
     private void showRoutePicker() {
         final CharSequence[] items = new CharSequence[]{
                 "DLNA ile gönder (test klip)",
@@ -208,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("Nasıl oynatılsın?")
                 .setItems(items, (d, which) -> {
-                    if (which == 0) startDlnaTestFlow();
+                    if (which == 0) startDlnaTestFlowWithDialog();
                     else if (which == 1) openSmartViewSettings();
                     else openCastChooser();
                 })
@@ -216,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    /* ===================== Cast chooser (uzun bas) ===================== */
+    /* ===================== Chromecast chooser (uzun bas) ===================== */
     private void openCastChooser() {
         try {
             DialogFragment f = MediaRouteDialogFactory.getDefault().onCreateChooserDialogFragment();
@@ -225,24 +226,119 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable e) { dbg("cast chooser failed", e); }
     }
 
-    /* ===================== DLNA TEST AKIŞI (ÖNCE TEST KLİBİ) ===================== */
+    /* ===================== DLNA: Tarama Diyaloğu + Test Push ===================== */
 
-    private void startDlnaTestFlow() {
-        Toast.makeText(this, "DLNA cihazları aranıyor…", Toast.LENGTH_SHORT).show();
+    private void startDlnaTestFlowWithDialog() {
+        // Progress dialog (modal)
+        ProgressBar pb = new ProgressBar(this);
+        pb.setIndeterminate(true);
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        container.setPadding(pad, pad, pad, pad);
+        container.addView(pb);
+
+        AlertDialog progressDialog = new AlertDialog.Builder(this)
+                .setTitle("Cihazlar aranıyor…")
+                .setMessage("DLNA MediaRenderer cihazları taranıyor (≈5 sn)…")
+                .setView(container)
+                .setNegativeButton("İptal", (d, w) -> { scanCancelled = true; })
+                .create();
+        progressDialog.setCancelable(false);
+        progressDialog.show();
+
+        scanCancelled = false;
         new Thread(() -> {
+            List<DlnaDevice> list = new ArrayList<>();
             try {
-                List<DlnaDevice> list = DlnaScanner.scanAndFilterDmrs(3200);
-                runOnUiThread(() -> {
-                    if (list.isEmpty()) {
-                        Toast.makeText(this, "Uygun DLNA MediaRenderer bulunamadı. Smart View deneyin.", Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    showDlnaPickerForTest(list);
-                });
+                acquireMl(true);
+                list = DlnaScanner.scanExtended(6000, (st, sent) -> dbg("SSDP sent: " + st),
+                        (from, usn, loc) -> dbg("SSDP resp from " + from + " usn=" + usn + " loc=" + loc),
+                        () -> scanCancelled);
             } catch (Throwable e) {
                 dbg("DLNA scan error", e);
-                runOnUiThread(() -> Toast.makeText(this, "DLNA tarama hatası.", Toast.LENGTH_LONG).show());
+            } finally {
+                acquireMl(false);
             }
+
+            List<DlnaDevice> good = new ArrayList<>();
+            for (DlnaDevice d : list) {
+                DlnaControl.fillServiceInfo(d);
+                if (d.avTransportCtrl != null && d.avTransportUrn != null) {
+                    good.add(d);
+                }
+            }
+
+            final List<DlnaDevice> devices = good;
+            runOnUiThread(() -> {
+                if (progressDialog.isShowing()) progressDialog.dismiss();
+                if (scanCancelled) {
+                    Toast.makeText(this, "Tarama iptal edildi.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (devices.isEmpty()) {
+                    showNoDeviceFoundSheet(list); // ham liste ile opsiyonlar
+                } else if (devices.size() == 1) {
+                    DlnaDevice sel = devices.get(0);
+                    selectedDevice = sel;
+                    Toast.makeText(this, "DLNA hedef: " + sel.displayName(), Toast.LENGTH_SHORT).show();
+                    playTestClip(sel);
+                } else {
+                    showDlnaPickerForTest(devices);
+                }
+            });
+        }).start();
+    }
+
+    private void showNoDeviceFoundSheet(List<DlnaDevice> rawList) {
+        String msg = "Uygun DLNA MediaRenderer bulunamadı.\n\n" +
+                "İpuçları:\n• TV ve telefon aynı Wi-Fi ağında olsun\n• Modemde AP Isolation kapalı olsun\n• Philips TV’de DLNA/SimplyShare açık olsun";
+        new AlertDialog.Builder(this)
+                .setTitle("Cihaz bulunamadı")
+                .setMessage(msg)
+                .setPositiveButton("Yeniden tara", (d,w)-> startDlnaTestFlowWithDialog())
+                .setNeutralButton("Smart View", (d,w)-> openSmartViewSettings())
+                .setNegativeButton("IP ile ekle", (d,w)-> promptManualIp())
+                .show();
+        // Ham yanıtları logla
+        if (!rawList.isEmpty()) {
+            StringBuilder sb = new StringBuilder("RAW DEVICES ("+rawList.size()+"):\n");
+            for (DlnaDevice x: rawList) sb.append(x.displayName()).append(" | ").append(x.location).append("\n");
+            dbg(sb.toString());
+        }
+    }
+
+    private void promptManualIp() {
+        final EditText input = new EditText(this);
+        input.setHint("Örn: 192.168.1.35");
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(this)
+                .setTitle("Cihaz IP’si")
+                .setMessage("TV’nin IP adresini girin. Ortak UPnP açıklama yolları otomatik denenecek.")
+                .setView(input)
+                .setPositiveButton("Bağlan", (d, w) -> {
+                    String ip = input.getText().toString().trim();
+                    if (ip.isEmpty()) { Toast.makeText(this, "IP gerekli.", Toast.LENGTH_SHORT).show(); return; }
+                    tryManualDiscovery(ip);
+                })
+                .setNegativeButton("İptal", null)
+                .show();
+    }
+
+    private void tryManualDiscovery(String ip) {
+        Toast.makeText(this, "IP üzerinden deneniyor…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            DlnaDevice dev = DlnaScanner.tryCommonDescriptionOnIp(ip);
+            if (dev != null) DlnaControl.fillServiceInfo(dev);
+            runOnUiThread(() -> {
+                if (dev != null && dev.avTransportCtrl != null) {
+                    selectedDevice = dev;
+                    Toast.makeText(this, "Bulundu: " + dev.displayName(), Toast.LENGTH_SHORT).show();
+                    playTestClip(dev);
+                } else {
+                    Toast.makeText(this, "Olmadı: UPnP açıklaması ya da AVTransport bulunamadı.", Toast.LENGTH_LONG).show();
+                }
+            });
         }).start();
     }
 
@@ -253,6 +349,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("DLNA Aygıtı Seç (önce test klip)")
                 .setItems(items, (d, which) -> {
                     DlnaDevice sel = devices.get(which);
+                    selectedDevice = sel;
                     Toast.makeText(this, "Seçildi: " + sel.displayName(), Toast.LENGTH_SHORT).show();
                     playTestClip(sel);
                 })
@@ -269,8 +366,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (ok) {
                         Toast.makeText(this, "Tamam! TV’de test video oynuyor.", Toast.LENGTH_LONG).show();
-                        // Sonraki adım: sayfadaki gerçek videoyu yakalayıp push edeceğiz.
-                        selectedDevice = dev; // doğrulanan cihazı hatırla
+                        // Buradan sonra sayfa içi video yakalama/push adımına geçebilirsiniz (FAB > DLNA ile gönder).
                     } else {
                         Toast.makeText(this, "OLMADI: Cihaz AVTransport desteklemiyor ya da reddetti.", Toast.LENGTH_LONG).show();
                     }
@@ -282,180 +378,8 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    /* ===================== DLNA/SmartView akışı (eski otomatik) ===================== */
-    // İstersen kalsın: menü/başka bir yerden çağırabilirsin. RoutePicker artık varsayılan.
-    private void startDlnaFlowAndPush() {
-        dbg("DLNA flow: scan");
-        new Thread(() -> {
-            try {
-                List<DlnaDevice> devices = DlnaScanner.scan(3200);
-                runOnUiThread(() -> {
-                    if (devices.isEmpty()) {
-                        dbg("DLNA none -> Smart View settings");
-                        openSmartViewSettings();
-                    } else if (devices.size() == 1) {
-                        selectedDevice = devices.get(0);
-                        Toast.makeText(this, "DLNA hedef: " + nameOf(selectedDevice), Toast.LENGTH_SHORT).show();
-                        tryAutoDetectAndPush();
-                    } else {
-                        showDlnaPicker(devices);
-                    }
-                });
-            } catch (Throwable e) {
-                dbg("DLNA scan error", e);
-                runOnUiThread(this::openSmartViewSettings);
-            }
-        }).start();
-    }
+    /* ===================== WebView & Sayfa içi video yakalama ===================== */
 
-    private void showDlnaPicker(List<DlnaDevice> devices) {
-        String[] items = new String[devices.size()];
-        for (int i = 0; i < devices.size(); i++) {
-            DlnaDevice d = devices.get(i);
-            items[i] = (d.friendlyName != null ? d.friendlyName : "DLNA Aygıtı")
-                    + "\n" + (d.server != null ? d.server : d.usn);
-        }
-        new AlertDialog.Builder(this)
-                .setTitle("DLNA Aygıtı Seç")
-                .setItems(items, (d, which) -> {
-                    selectedDevice = devices.get(which);
-                    Toast.makeText(this, "Seçildi: " + nameOf(selectedDevice), Toast.LENGTH_SHORT).show();
-                    tryAutoDetectAndPush();
-                })
-                .setNegativeButton("İptal", null)
-                .show();
-    }
-
-    private String nameOf(DlnaDevice d) {
-        return d == null ? "?" : (d.friendlyName != null ? d.friendlyName :
-                (d.server != null ? d.server : d.usn));
-    }
-
-    /* === Medya URL’sini bul ve push et (sayfa içi) === */
-    private void tryAutoDetectAndPush() {
-        // 1) Ağdan yakalanan son medya URLsini dene
-        String candidate = lastMediaUrl;
-        if (candidate != null) {
-            handleFoundMedia(candidate);
-            return;
-        }
-        // 2) Yoksa JS ile <video> tara (iframe’de değilse)
-        String js =
-                "(function(){\n" +
-                "  function bestSrc(v){ if(!v) return null; if(v.currentSrc) return v.currentSrc; if(v.src) return v.src; var ss=v.querySelectorAll('source'); for(var i=0;i<ss.length;i++){ if(ss[i].src) return ss[i].src; } return null; }\n" +
-                "  var vids=document.querySelectorAll('video'); if(vids.length===0){ window.MiniCastBridge.onNoVideo(); return; }\n" +
-                "  var v=vids[0]; var u=bestSrc(v); if(u){ window.MiniCastBridge.onVideoUrl(u); }\n" +
-                "  v.addEventListener('play', function(){ var u2=bestSrc(v); if(u2) window.MiniCastBridge.onVideoUrl(u2); }, {once:true});\n" +
-                "})();";
-        runOnUiThread(() -> web.evaluateJavascript(js, null));
-        Toast.makeText(this, "Videoyu arıyorum… (ağ istekleri dinleniyor)", Toast.LENGTH_SHORT).show();
-    }
-
-    /** JS → Android köprüsü */
-    private class JsBridge {
-        @JavascriptInterface public void onNoVideo() {
-            dbg("JS: no <video> on page");
-        }
-        @JavascriptInterface public void onVideoUrl(String url) {
-            dbg("JS video url: " + url);
-            lastMediaUrl = url;
-            handleFoundMedia(url);
-        }
-    }
-
-    // URL analiz: m3u8 ise en yüksek bitrate’i seç, değilse doğrudan push
-    private void handleFoundMedia(String url) {
-        new Thread(() -> {
-            try {
-                String playUrl = url;
-                String lower = url.toLowerCase(Locale.ROOT);
-                if (lower.contains(".m3u8")) {
-                    String master = httpGetString(url, 4500);
-                    if (master != null) {
-                        String best = pickBestFromHlsMaster(master, url);
-                        if (best != null) playUrl = best;
-                    }
-                }
-                String mime = guessMime(playUrl);
-                dbg("DLNA play: " + playUrl + " (" + mime + ")");
-                if (selectedDevice != null) {
-                    DlnaControl ctl = DlnaControl.fromDevice(selectedDevice);
-                    if (ctl != null) {
-                        boolean ok = ctl.playUrl(playUrl, mime);
-                        runOnUiThread(() ->
-                                Toast.makeText(this, ok ? "TV’de oynatılıyor: "+nameOf(selectedDevice)
-                                                        : "DLNA oynatma başarısız.", Toast.LENGTH_LONG).show());
-                    } else {
-                        runOnUiThread(() -> Toast.makeText(this, "DLNA denetim URL’leri bulunamadı.", Toast.LENGTH_LONG).show());
-                    }
-                }
-            } catch (Throwable e) {
-                dbg("handleFoundMedia error", e);
-                runOnUiThread(() -> Toast.makeText(this, "Oynatma hatası.", Toast.LENGTH_LONG).show());
-            }
-        }).start();
-    }
-
-    private String guessMime(String u) {
-        String l = u.toLowerCase(Locale.ROOT);
-        if (l.contains(".m3u8")) return "application/vnd.apple.mpegurl";
-        if (l.contains(".mpd"))  return "application/dash+xml";
-        if (l.contains(".mp4"))  return "video/mp4";
-        if (l.contains(".webm")) return "video/webm";
-        return "video/*";
-    }
-
-    private String httpGetString(String url, int timeoutMs) {
-        BufferedReader br = null;
-        try {
-            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-            c.setConnectTimeout(timeoutMs);
-            c.setReadTimeout(timeoutMs);
-            c.setInstanceFollowRedirects(true);
-            c.addRequestProperty("User-Agent","Mozilla/5.0");
-            c.connect();
-            br = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            String line; while ((line = br.readLine()) != null) sb.append(line).append("\n");
-            return sb.toString();
-        } catch (Throwable ignored) {
-            return null;
-        } finally { try { if (br != null) br.close(); } catch (Throwable ignore) {} }
-    }
-
-    // HLS master’dan en yüksek BANDWIDTH varyantını seç
-    private String pickBestFromHlsMaster(String master, String baseUrl) {
-        long bestBw = -1;
-        String bestUri = null;
-        String[] lines = master.split("\n");
-        for (int i=0; i<lines.length-1; i++) {
-            String l = lines[i].trim();
-            if (l.startsWith("#EXT-X-STREAM-INF")) {
-                long bw = parseBandwidth(l);
-                String next = lines[i+1].trim();
-                if (!next.startsWith("#") && next.length()>0) {
-                    if (bw > bestBw) { bestBw = bw; bestUri = resolveHlsUri(baseUrl, next); }
-                }
-            }
-        }
-        return bestUri;
-    }
-    private long parseBandwidth(String inf) {
-        try {
-            int i = inf.toUpperCase(Locale.ROOT).indexOf("BANDWIDTH=");
-            if (i>=0) {
-                int e = inf.indexOf(",", i);
-                String v = (e>i ? inf.substring(i+10, e) : inf.substring(i+10)).trim();
-                return Long.parseLong(v);
-            }
-        } catch (Throwable ignored) {}
-        return -1;
-    }
-    private String resolveHlsUri(String base, String rel) {
-        try { return new URL(new URL(base), rel).toString(); } catch (Throwable e) { return rel; }
-    }
-
-    /* ===================== WebView ===================== */
     @SuppressLint({"SetJavaScriptEnabled"})
     private void setupWebView(WebView wv) {
         WebSettings s = wv.getSettings();
@@ -467,11 +391,9 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setSupportMultipleWindows(true);
 
-        // Dışarı atma yok; iframe’ler dahil tüm frame’ler bu WebView’de
         wv.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView v, String url) {
                 super.onPageFinished(v, url);
-                // Sayfa yüklenince, varsa otomatik yakalama:
                 evaluateVideoProbe();
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
@@ -483,19 +405,16 @@ public class MainActivity extends AppCompatActivity {
                 if (url != null) v.loadUrl(url);
                 return true;
             }
-
-            // *** ÖNEMLİ: Ağ isteklerinden medya URL’lerini yakala (iframe’ler dahil) ***
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 try {
                     Uri u = request.getUrl();
                     if (u != null) {
-                        String su = u.toString();
-                        String sul = su.toLowerCase(Locale.ROOT);
-                        if (sul.contains(".m3u8") || sul.contains(".mp4") || sul.contains(".mpd")) {
-                            synchronized (mediaCandidates) { mediaCandidates.add(su); }
-                            lastMediaUrl = su;
-                            dbg("INTERCEPT media: " + su);
+                        String su = u.toString().toLowerCase(Locale.ROOT);
+                        if (su.contains(".m3u8") || su.contains(".mp4") || su.contains(".mpd")) {
+                            synchronized (mediaCandidates) { mediaCandidates.add(u.toString()); }
+                            lastMediaUrl = u.toString();
+                            dbg("INTERCEPT media: " + u);
                         }
                     }
                 } catch (Throwable ignored) {}
@@ -535,55 +454,103 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> web.evaluateJavascript(js, null));
     }
 
-    /* ===================== DLNA/UPnP: MODEL + KEŞİF + KONTROL ===================== */
-
-    static class DlnaDevice {
-        String usn, st, server, location, friendlyName;
-        String avTransportCtrl, avTransportUrn; // urn:schemas-upnp-org:service:AVTransport:X
-
-        String displayName() {
-            return friendlyName != null ? friendlyName :
-                    (server != null ? server : (usn != null ? usn : "DLNA Aygıtı"));
+    private class JsBridge {
+        @JavascriptInterface public void onVideoUrl(String url) {
+            dbg("JS video url: " + url);
+            lastMediaUrl = url;
         }
+        @JavascriptInterface public void onNoVideo() { dbg("JS: no <video> on page"); }
     }
+
+    /* === (Opsiyonel) Sayfa içi bulunan URL'yi push etmek için çağırın === */
+    private void tryAutoDetectAndPush() {
+        String candidate = lastMediaUrl;
+        if (candidate == null) {
+            Toast.makeText(this, "Önce videoyu başlatın ya da sayfada video bulun.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new Thread(() -> {
+            try {
+                String playUrl = candidate;
+                String mime = guessMime(playUrl);
+                DlnaControl ctl = DlnaControl.fromDevice(selectedDevice);
+                boolean ok = (ctl != null) && ctl.playUrl(playUrl, mime);
+                runOnUiThread(() -> Toast.makeText(this, ok ? "TV’de oynatılıyor." : "DLNA oynatma başarısız.", Toast.LENGTH_LONG).show());
+            } catch (Throwable e) {
+                dbg("tryAutoDetectAndPush error", e);
+                runOnUiThread(() -> Toast.makeText(this, "Oynatma hatası.", Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private String guessMime(String u) {
+        String l = u.toLowerCase(Locale.ROOT);
+        if (l.contains(".m3u8")) return "application/vnd.apple.mpegurl";
+        if (l.contains(".mpd"))  return "application/dash+xml";
+        if (l.contains(".mp4"))  return "video/mp4";
+        if (l.contains(".webm")) return "video/webm";
+        return "video/*";
+    }
+
+    /* ===================== DLNA/UPnP: MODEL + TARAYICI + KONTROL ===================== */
+
+    static class DlnaDevice { String usn, st, server, location, friendlyName; String avTransportCtrl, avTransportUrn;
+        String displayName() { return friendlyName!=null? friendlyName : (server!=null? server : (usn!=null? usn : "DLNA Aygıtı")); } }
+
+    interface SendHook { void onSend(String st, int count); }
+    interface RespHook { void onResp(String from, String usn, String location); }
+    interface CancelFlag { boolean isCancelled(); }
 
     static class DlnaScanner {
         private static final String SSDP_ADDR = "239.255.255.250";
         private static final int SSDP_PORT = 1900;
 
-        static List<DlnaDevice> scan(int timeoutMs) throws Exception {
-            long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+        // Genişletilmiş tarama: çoklu ST + tekrar + 6 sn alım
+        static List<DlnaDevice> scanExtended(int windowMs, SendHook sendHook, RespHook respHook, CancelFlag cancel) throws Exception {
+            long deadline = SystemClock.elapsedRealtime() + windowMs;
             Map<String, DlnaDevice> map = new LinkedHashMap<>();
 
-            String msearch =
-                    "M-SEARCH * HTTP/1.1\r\n" +
-                            "HOST: " + SSDP_ADDR + ":" + SSDP_PORT + "\r\n" +
-                            "MAN: \"ssdp:discover\"\r\n" +
-                            "MX: 2\r\n" +
-                            "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n";
+            String[] sts = new String[]{
+                    "urn:schemas-upnp-org:device:MediaRenderer:1",
+                    "urn:schemas-upnp-org:service:AVTransport:1",
+                    "urn:schemas-upnp-org:service:AVTransport:2",
+                    "urn:schemas-upnp-org:service:AVTransport:3",
+                    "upnp:rootdevice",
+                    "ssdp:all"
+            };
 
             try (DatagramSocket sock = new DatagramSocket()) {
                 sock.setReuseAddress(true);
-                sock.setSoTimeout(800);
+                sock.setSoTimeout(700);
 
-                byte[] data = msearch.getBytes(StandardCharsets.US_ASCII);
-                DatagramPacket dp = new DatagramPacket(
-                        data, data.length, InetAddress.getByName(SSDP_ADDR), SSDP_PORT);
-
-                sock.send(dp); Thread.sleep(120);
-                sock.send(dp); Thread.sleep(120);
-                sock.send(dp);
+                // Her ST için 2 gönderim
+                for (String st : sts) {
+                    String msearch = "M-SEARCH * HTTP/1.1\r\n" +
+                            "HOST: " + SSDP_ADDR + ":" + SSDP_PORT + "\r\n" +
+                            "MAN: \"ssdp:discover\"\r\n" +
+                            "MX: 2\r\n" +
+                            "ST: " + st + "\r\n\r\n";
+                    byte[] data = msearch.getBytes(StandardCharsets.US_ASCII);
+                    DatagramPacket dp = new DatagramPacket(data, data.length,
+                            InetAddress.getByName(SSDP_ADDR), SSDP_PORT);
+                    sock.send(dp); if (sendHook != null) sendHook.onSend(st, 1);
+                    Thread.sleep(120);
+                    sock.send(dp); if (sendHook != null) sendHook.onSend(st, 2);
+                    Thread.sleep(80);
+                }
 
                 byte[] buf = new byte[4096];
                 while (SystemClock.elapsedRealtime() < deadline) {
+                    if (cancel != null && cancel.isCancelled()) break;
                     DatagramPacket resp = new DatagramPacket(buf, buf.length);
                     try {
                         sock.receive(resp);
                         String txt = new String(resp.getData(), 0, resp.getLength(), StandardCharsets.UTF_8);
                         DlnaDevice d = parseResponse(txt);
                         if (d != null && d.usn != null) {
+                            if (respHook != null) respHook.onResp(resp.getAddress().getHostAddress(), d.usn, d.location);
                             if (d.location != null && d.friendlyName == null) {
-                                d.friendlyName = fetchFriendlyName(d.location, 500);
+                                d.friendlyName = fetchFriendlyName(d.location, 700);
                             }
                             map.put(d.usn, d);
                         }
@@ -591,17 +558,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             return new ArrayList<>(map.values());
-        }
-
-        // Sadece gerçekten AVTransport servisi olan cihazları döndür
-        static List<DlnaDevice> scanAndFilterDmrs(int timeoutMs) throws Exception {
-            List<DlnaDevice> all = scan(timeoutMs);
-            List<DlnaDevice> good = new ArrayList<>();
-            for (DlnaDevice d : all) {
-                DlnaControl.fillServiceInfo(d);
-                if (d.avTransportCtrl != null && d.avTransportUrn != null) good.add(d);
-            }
-            return good;
         }
 
         private static DlnaDevice parseResponse(String txt) {
@@ -643,6 +599,33 @@ public class MainActivity extends AppCompatActivity {
             } finally { try { if (br != null) br.close(); } catch (Throwable ignore) {} }
             return null;
         }
+
+        // Kullanıcı IP verirse yaygın description yollarını dene
+        static DlnaDevice tryCommonDescriptionOnIp(String ip) {
+            String[] paths = new String[]{
+                    "/description.xml", "/rootDesc.xml", "/DeviceDescription.xml", "/RenderingControl/desc.xml", "/dmr.xml", "/devdesc.xml"
+            };
+            int[] ports = new int[]{ 80, 2869, 49152, 49153, 49154, 49155, 49156, 49157, 49158, 49159, 49160 };
+            for (int p : ports) {
+                for (String path : paths) {
+                    String url = "http://" + ip + ":" + p + path;
+                    try {
+                        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                        c.setConnectTimeout(800); c.setReadTimeout(800);
+                        c.addRequestProperty("User-Agent","Mozilla/5.0");
+                        int code = c.getResponseCode();
+                        if (code >= 200 && code < 300) {
+                            DlnaDevice d = new DlnaDevice();
+                            d.location = url;
+                            d.friendlyName = fetchFriendlyName(url, 600);
+                            d.usn = "manual:"+ip;
+                            return d;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+            return null;
+        }
     }
 
     /* === DLNA kontrol katmanı: AVTransport (versiyon-duyarlı) === */
@@ -655,15 +638,14 @@ public class MainActivity extends AppCompatActivity {
             return (d != null && d.avTransportCtrl != null && d.avTransportUrn != null) ? new DlnaControl(d) : null;
         }
 
-        // Cihaz açıklamasından AVTransport:* servis URN’i ve controlURL’yi çek
         static void fillServiceInfo(DlnaDevice d) {
             if (d == null || d.location == null || d.avTransportCtrl != null) return;
             try {
-                String desc = httpGet(d.location, 4000);
+                String desc = httpGet(d.location, 1500);
                 if (desc == null) return;
                 String base = baseUrlOf(d.location);
 
-                ServiceInfo avt = findService(desc, "AVTransport"); // versiyonu neyse o
+                ServiceInfo avt = findService(desc, "AVTransport");
                 if (avt != null && avt.controlURL != null && avt.serviceType != null) {
                     d.avTransportCtrl = join(base, avt.controlURL);
                     d.avTransportUrn  = avt.serviceType; // urn:schemas-upnp-org:service:AVTransport:X
@@ -729,7 +711,7 @@ public class MainActivity extends AppCompatActivity {
                     "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\" " +
                     "xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\">" +
                     "<item id=\"0\" parentID=\"0\" restricted=\"1\">" +
-                    "<dc:title>MiniCast</dc:title>" +
+                    "<dc:title>MiniCast Test</dc:title>" +
                     "<res protocolInfo=\"" + prot + "\">" + xmlEsc(url) + "</res>" +
                     "<upnp:class>object.item.videoItem</upnp:class>" +
                     "</item></DIDL-Lite>";
@@ -761,7 +743,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /* ===================== İzin/SmartView ===================== */
+    /* ===================== İzin/SmartView & yardımcılar ===================== */
     private void ensureFineLocation() {
         if (Build.VERSION.SDK_INT >= 23) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -789,4 +771,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-}
+    private void acquireMl(boolean on) {
+        if (mlock == null) return;
+        try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); }
+        catch (Throwable ignored) {}
+    }
+            }
