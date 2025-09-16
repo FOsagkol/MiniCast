@@ -9,10 +9,9 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorSurface"
         app:title="MiniCast"
         app:titleCentered="true"
-        app:menu="@menu/main_menu"/>
+        android:background="?attr/colorSurface"/>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -20,13 +19,13 @@
         android:orientation="vertical"
         android:paddingTop="?attr/actionBarSize">
 
-        <!-- Basit adres çubuğu -->
+        <!-- basit adres çubuğu -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="48dp"
+            android:gravity="center_vertical"
             android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:gravity="center_vertical">
+            android:paddingEnd="12dp">
 
             <EditText
                 android:id="@+id/urlBox"
@@ -54,5 +53,17 @@
             android:layout_height="0dp"
             android:layout_weight="1"/>
     </LinearLayout>
+
+    <!-- Sağ-alt tek aksiyon butonu -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabAction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        android:contentDescription="Yansıt / DLNA / Cast"
+        app:srcCompat="@drawable/ic_smartview"
+        app:tint="@android:color/white"
+        app:layout_anchorGravity="bottom|end"
+        android:layout_gravity="bottom|end"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
