@@ -1,4 +1,4 @@
-// app/build.gradle — MainActivity.java ile uyumlu + teşhis görevleri eklenmiş sürüm
+// app/build.gradle — Seçenek A (AndroidX SplashScreen) ile uyumlu + teşhis görevleri eklenmiş sürüm
 
 plugins {
     id 'com.android.application'
@@ -25,7 +25,7 @@ android {
         debug { }
     }
 
-    // Java 17 (MainActivity kodu için güvenli)
+    // Java 17
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -39,19 +39,18 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
 
-    // Chromecast chooser için
+    // Chromecast chooser
     implementation 'androidx.mediarouter:mediarouter:1.6.0'
     implementation 'com.google.android.gms:play-services-cast-framework:21.5.0'
 
-    // SplashScreen attribute hatalarını çözmek için
+    // SplashScreen öznitelikleri için
     implementation 'androidx.core:core-splashscreen:1.0.1'
 
-    // (Opsiyonel) WebKit yardımcıları
+    // (Opsiyonel)
     // implementation 'androidx.webkit:webkit:1.10.0'
 }
 
 // ---- DIAGNOSTIC TASKS FOR RESOURCE LINKING ----
-
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -59,7 +58,6 @@ import java.nio.file.StandardCopyOption
 tasks.register("copyMergedResForDiag") {
     group = "diagnostics"
     description = "Copy merged resource values to a stable diagnostics folder."
-
     doLast {
         File srcDir = file("$buildDir/intermediates/merged_res/debug/values")
         File dstDir = file("$buildDir/diagnostics/merged_values_debug")
@@ -83,7 +81,6 @@ tasks.register("copyMergedResForDiag") {
 tasks.register("diagSplashAttrs") {
     group = "diagnostics"
     description = "Scan merged values for SplashScreen attributes and print occurrences with line numbers."
-
     doLast {
         File valuesDir = file("$buildDir/intermediates/merged_res/debug/values")
         if (!valuesDir.exists()) {
