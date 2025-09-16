@@ -75,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
 
     // Seçili DLNA aygıtı (push hedefi)
     private DlnaDevice selectedDevice;
-    private DlnaDevice lastAutoPicked; // tek cihaz bulunursa otomatik seçelim
+    private DlnaDevice lastAutoPicked;
 
     /* ===== Logger: Downloads + app-özel + logcat ===== */
 
@@ -194,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean onToolbarItem(@NonNull MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_cast) {
-            // MediaRouteActionProvider kendi chooser'ını açar; ekstra iş yok.
+            // MediaRouteActionProvider kendi chooser'ını açar.
             return true;
         } else if (id == R.id.action_smartview) {
             // DLNA cihazları tara + seç (otomatik/manuel), sonra web’deki videoyu push et
@@ -214,7 +214,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (devices.isEmpty()) {
                         dbg("DLNA none -> open Smart View settings");
-                        openSmartViewSettings();
+                        openSmartViewSettings(); // <-- EKSİK OLAN METOT ARTIK VAR
                     } else if (devices.size() == 1) {
                         selectedDevice = lastAutoPicked = devices.get(0);
                         Toast.makeText(this, "DLNA hedef: " + nameOf(selectedDevice), Toast.LENGTH_SHORT).show();
@@ -225,7 +225,7 @@ public class MainActivity extends AppCompatActivity {
                 });
             } catch (Throwable e) {
                 dbg("DLNA scan error", e);
-                runOnUiThread(this::openSmartViewSettings);
+                runOnUiThread(this::openSmartViewSettings); // <-- method reference OK
             }
         }).start();
     }
@@ -260,7 +260,6 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Önce DLNA aygıtı seçin.", Toast.LENGTH_SHORT).show();
             return;
         }
-        // Sayfadaki <video>’ları tarayıp ilk/aktif olanın kaynağını bildir
         String js =
                 "(function(){\n" +
                 "  function bestSrc(v){\n" +
@@ -359,7 +358,6 @@ public class MainActivity extends AppCompatActivity {
 
     // Basit HLS master seçici: en yüksek BANDWIDTH varyantı seç
     private String pickBestFromHlsMaster(String master, String baseUrl) {
-        // #EXT-X-STREAM-INF:BANDWIDTH=...,RESOLUTION=...
         long bestBw = -1;
         String bestUri = null;
         String[] lines = master.split("\n");
@@ -398,7 +396,6 @@ public class MainActivity extends AppCompatActivity {
 
         static DlnaControl fromDevice(DlnaDevice d) {
             try {
-                // Cihaz açıklamasından servis controlURL’lerini çek
                 String desc = httpGet(d.location, 4000);
                 if (desc == null) return null;
                 String base = baseUrlOf(d.location);
@@ -414,7 +411,6 @@ public class MainActivity extends AppCompatActivity {
         boolean playUrl(String mediaUrl, String mime) {
             try {
                 String meta = didlLiteFor(mediaUrl, mime);
-                // 1) SetAVTransportURI
                 String setBody =
                         "<u:SetAVTransportURI xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">" +
                         "<InstanceID>0</InstanceID>" +
@@ -422,7 +418,6 @@ public class MainActivity extends AppCompatActivity {
                         "<CurrentURIMetaData>" + xmlEsc(meta) + "</CurrentURIMetaData>" +
                         "</u:SetAVTransportURI>";
                 if (!soap(avTransportCtrl, "SetAVTransportURI", setBody)) return false;
-                // 2) Play
                 String playBody =
                         "<u:Play xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">" +
                         "<InstanceID>0</InstanceID><Speed>1</Speed></u:Play>";
@@ -449,7 +444,6 @@ public class MainActivity extends AppCompatActivity {
             return u.getProtocol() + "://" + u.getHost() + (p>0? (":" + p): "");
         }
         private static String findServiceCtrl(String descXml, String serviceName) {
-            // basit ve hızlı: serviceType/AVTransport veya RenderingControl bloğundaki controlURL
             String upnp = "urn:schemas-upnp-org:service:" + serviceName + ":1";
             int i = descXml.indexOf(upnp);
             if (i < 0) return null;
@@ -531,7 +525,6 @@ public class MainActivity extends AppCompatActivity {
         wv.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView v, String url) {
                 super.onPageFinished(v, url);
-                // Sayfa yüklendiğinde otomatik video araması (DLNA hedefi zaten seçilmişse)
                 if (selectedDevice != null) tryAutoPushCurrentVideo();
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
@@ -687,4 +680,24 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
     }
+
+    /* === Smart View/Ekran Yansıtma ayarını aç (GEREKİYORDU) === */
+    private void openSmartViewSettings() {
+        try {
+            Intent i = new Intent(Settings.ACTION_CAST_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            dbg("opened Smart View / Cast settings");
+        } catch (Throwable e1) {
+            try {
+                Intent i2 = new Intent("android.settings.WIFI_DISPLAY_SETTINGS");
+                i2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i2);
+                dbg("opened WIFI_DISPLAY_SETTINGS");
+            } catch (Throwable e2) {
+                dbg("openSmartViewSettings failed", e2);
+                Toast.makeText(this, "Cihaz yansıtma ayarı açılamadı.", Toast.LENGTH_SHORT).show();
             }
+        }
+    }
+    }
