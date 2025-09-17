@@ -13,7 +13,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.Uri;
-import android.net.wifi.WifiManager;
+  import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
@@ -867,4 +867,4 @@ public class MainActivity extends AppCompatActivity {
         try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); }
         catch (Throwable ignored) {}
     }
-            }i
+                            }
