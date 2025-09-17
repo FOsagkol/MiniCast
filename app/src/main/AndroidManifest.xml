@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
+    <!-- Android 13+ (targetSdk 33+) ise yakındaki Wi-Fi cihazlarına erişim için: -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+                     android:usesPermissionFlags="neverForLocation"/>
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
