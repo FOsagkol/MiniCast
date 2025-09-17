@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest package="com.example.minicast"
-    xmlns:android="http://schemas.android.com/apk/res/android">
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
-    <application
-        android:allowBackup="true"
-        android:label="@string/app_name"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
-        android:theme="@style/Theme.MiniCast">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="keyboardHidden|orientation|screenSize"
-            android:screenOrientation="sensorLandscape"
-            android:resizeableActivity="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-        </activity>
-    </application>
+    <!-- WebView kullanıyorsanız -->
+    <WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:keepScreenOn="true" />
 
-</manifest>
+    <!-- Smart View’ı açan sabit buton -->
+    <Button
+        android:id="@+id/btnSmartView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Smart View’a Bağlan"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16"
+        android:background="?android:attr/selectableItemBackground"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"/>
+
+</FrameLayout>
