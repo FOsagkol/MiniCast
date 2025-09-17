@@ -1,4 +1,4 @@
-/*  --- MainActivity.java (DLNA tarama güçlendirilmiş sürüm) ---  */
+/*  --- MainActivity.java (DLNA tarama güçlendirilmiş + derleme düzeltmeleri) ---  */
 package com.example.minicast;
 
 import android.Manifest;
@@ -61,7 +61,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
 import java.net.NetworkInterface;
-import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -469,7 +468,6 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         if (!nif.isUp() || nif.isLoopback()) continue;
                         msock.joinGroup(new InetSocketAddress(InetAddress.getByName(SSDP_ADDR), SSDP_PORT), nif);
-                        // sadece ilk join yeterli olabilir; ama birden çoğuna katılmak problem olmaz
                     } catch (Throwable ignored) {}
                 }
 
@@ -674,6 +672,8 @@ public class MainActivity extends AppCompatActivity {
 
         PushReport playUrlCompat(String mediaUrl, String mime, int soapTimeoutMs) {
             PushReport rep = new PushReport();
+
+            // İlk deneme öncesi sessizce Stop
             soapQuiet("Stop", "<u:Stop xmlns:u=\""+dev.avTransportUrn+"\"><InstanceID>0</InstanceID></u:Stop>", soapTimeoutMs);
 
             StepResult s1 = setUri(mediaUrl, null, 0, soapTimeoutMs); rep.steps.add(s1);
@@ -710,6 +710,27 @@ public class MainActivity extends AppCompatActivity {
                     "<InstanceID>"+instanceId+"</InstanceID><NextURI>"+xmlEsc(url)+"</NextURI>" +
                     "<NextURIMetaData>"+md+"</NextURIMetaData></u:SetNextAVTransportURI>";
             return doSoap("SetNextAVTransportURI", body, to);
+        }
+
+        // >>> EKLENEN: Standart uyumlu Stop wrapper (derleme hatası giderir)
+        private StepResult stop(int instanceId, int to){
+            String body = "<u:Stop xmlns:u=\"" + dev.avTransportUrn + "\">" +
+                          "<InstanceID>"+instanceId+"</InstanceID></u:Stop>";
+            return doSoap("Stop", body, to);
+        }
+
+        // >>> EKLENEN: Minimal DIDL-Lite metadata üretici (derleme hatası giderir)
+        private String didlLiteFor(String mediaUrl, String mime){
+            String m = (mime==null || mime.isEmpty()) ? "*" : mime;
+            String protocolInfo = "http-get:*:" + m + ":*";
+            return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
+                   "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
+                   "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
+                   "<item id=\"0\" parentID=\"0\" restricted=\"1\">" +
+                   "<dc:title>MiniCast</dc:title>" +
+                   "<upnp:class>object.item.videoItem</upnp:class>" +
+                   "<res protocolInfo=\"" + protocolInfo + "\">" + xmlEsc(mediaUrl) + "</res>" +
+                   "</item></DIDL-Lite>";
         }
 
         private StepResult doSoap(String action, String inner, int to) {
@@ -846,4 +867,4 @@ public class MainActivity extends AppCompatActivity {
         try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); }
         catch (Throwable ignored) {}
     }
-                }
+    }
