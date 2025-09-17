@@ -7,6 +7,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -53,6 +57,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -64,38 +69,32 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** MiniCast – DLNA push (genişletilmiş tarama + test klip), Smart View, Chromecast */
+/** MiniCast – DLNA push (gelişmiş tarama + test klip), Smart View, Chromecast */
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MiniCastCrash";
     private static final int REQ_FINE_LOCATION = 42;
 
-    // --- TEST KLİBİ (ilk bağlantı doğrulaması için) ---
+    // Test klibi (ilk bağlantıyı doğrulamak için)
     private static final String TEST_URL  = "https://filesamples.com/samples/video/mp4/sample_960x400_ocean_with_audio.mp4";
     private static final String TEST_MIME = "video/mp4";
 
-    // TARAMA/PARSE zamanları
-    private static final int SCAN_WINDOW_MS = 10_000;
-    private static final int DESC_TIMEOUT_MS = 2_000;
+    // Süreler
+    private static final int SCAN_WINDOW_MS   = 15_000; // 15 sn tarama
+    private static final int DESC_TIMEOUT_MS  = 2_000;  // cihaz açıklaması
+    private static final int SOAP_TIMEOUT_MS  = 4_000;  // AVTransport SOAP
 
     private WebView web;
     private EditText urlBox;
     private FloatingActionButton fab;
 
-    // DLNA hedefi
     private DlnaDevice selectedDevice;
 
-    // Ağdan yakalanan medya URL adayları
     private final Set<String> mediaCandidates = new LinkedHashSet<>();
     private volatile String lastMediaUrl = null;
 
-    // Multicast lock (tarama sırasında)
     private WifiManager.MulticastLock mlock;
-
-    // Tarama iptal kontrolü
     private volatile boolean scanCancelled = false;
-
-    // SmartView dönüş algılama
     private boolean smartViewLaunched = false;
 
     /* ===== Logger: Downloads + app-özel + logcat ===== */
@@ -187,15 +186,8 @@ public class MainActivity extends AppCompatActivity {
         try { CastContext.getSharedInstance(this); } catch (Throwable e) { dbg("CastContext init failed", e); }
 
         ensureFineLocation();
-
-        // Multicast lock hazırla (tarama anında acquire/release edeceğiz)
-        try {
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            if (wm != null) {
-                mlock = wm.createMulticastLock("minicast-dlna");
-                mlock.setReferenceCounted(false);
-            }
-        } catch (Throwable e) { dbg("multicast lock prepare failed", e); }
+        prepareMulticast();
+        bindToWifiNetwork(); // multicast/SSDP dönüşleri kaçmasın
 
         web.addJavascriptInterface(new JsBridge(), "MiniCastBridge");
     }
@@ -204,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (smartViewLaunched) {
             smartViewLaunched = false;
-            // Smart View ayarından dönüldü: otomatik DLNA taraması + test klip push
+            // Smart View ayarından dönünce otomatik DLNA taraması + test push
             startDlnaTestFlowWithDialog();
         }
     }
@@ -244,7 +236,6 @@ public class MainActivity extends AppCompatActivity {
     /* ===================== DLNA: Tarama Diyaloğu + Test Push ===================== */
 
     private void startDlnaTestFlowWithDialog() {
-        // Progress dialog (modal)
         ProgressBar pb = new ProgressBar(this);
         pb.setIndeterminate(true);
         LinearLayout container = new LinearLayout(this);
@@ -255,7 +246,7 @@ public class MainActivity extends AppCompatActivity {
 
         AlertDialog progressDialog = new AlertDialog.Builder(this)
                 .setTitle("Cihazlar aranıyor…")
-                .setMessage("DLNA MediaRenderer cihazları taranıyor (≈10 sn)…")
+                .setMessage("DLNA MediaRenderer cihazları taranıyor (≈15 sn)…")
                 .setView(container)
                 .setNegativeButton("İptal", (d, w) -> { scanCancelled = true; })
                 .create();
@@ -286,23 +277,12 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            final List<DlnaDevice> devices = good;
             runOnUiThread(() -> {
                 if (progressDialog.isShowing()) progressDialog.dismiss();
-                if (scanCancelled) {
-                    Toast.makeText(this, "Tarama iptal edildi.", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if (devices.isEmpty()) {
-                    showNoDeviceFoundSheet(list);
-                } else if (devices.size() == 1) {
-                    DlnaDevice sel = devices.get(0);
-                    selectedDevice = sel;
-                    Toast.makeText(this, "DLNA hedef: " + sel.displayName(), Toast.LENGTH_SHORT).show();
-                    playTestClipCompat(sel);
-                } else {
-                    showDlnaPickerForTest(devices);
-                }
+                if (scanCancelled) { Toast.makeText(this, "Tarama iptal edildi.", Toast.LENGTH_SHORT).show(); return; }
+                if (good.isEmpty()) { showNoDeviceFoundSheet(list); }
+                else if (good.size() == 1) { selectedDevice = good.get(0); Toast.makeText(this, "DLNA hedef: " + selectedDevice.displayName(), Toast.LENGTH_SHORT).show(); playTestClipCompat(selectedDevice); }
+                else { showDlnaPickerForTest(good); }
             });
         }).start();
     }
@@ -331,7 +311,7 @@ public class MainActivity extends AppCompatActivity {
         input.setInputType(InputType.TYPE_CLASS_TEXT);
         new AlertDialog.Builder(this)
                 .setTitle("Cihaz IP’si")
-                .setMessage("TV’nin IP adresini girin. Ortak UPnP açıklama yolları otomatik denenecek.")
+                .setMessage("TV’nin IP’sini girin. Önce UNICAST M-SEARCH, sonra yaygın UPnP description yolları denenecek.")
                 .setView(input)
                 .setPositiveButton("Bağlan", (d, w) -> {
                     String ip = input.getText().toString().trim();
@@ -343,18 +323,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void tryManualDiscovery(String ip) {
-        Toast.makeText(this, "IP üzerinden deneniyor…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "IP üzerinden deneme başlatıldı…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
-            DlnaDevice dev = DlnaScanner.tryCommonDescriptionOnIp(ip);
+            // 1) Unicast SSDP M-SEARCH (1900/udp)
+            DlnaDevice dev = DlnaScanner.tryUnicastSsdp(ip, 2_000);
+            if (dev == null) {
+                // 2) HTTP description taraması
+                dev = DlnaScanner.tryCommonDescriptionOnIp(ip);
+            }
             if (dev != null) DlnaControl.fillServiceInfo(dev);
 
+            DlnaDevice finalDev = dev;
             runOnUiThread(() -> {
-                if (dev != null && dev.avTransportCtrl != null) {
-                    selectedDevice = dev;
-                    Toast.makeText(this, "Bulundu: " + dev.displayName(), Toast.LENGTH_SHORT).show();
-                    playTestClipCompat(dev);
+                if (finalDev != null && finalDev.avTransportCtrl != null) {
+                    selectedDevice = finalDev;
+                    Toast.makeText(this, "Bulundu: " + finalDev.displayName(), Toast.LENGTH_SHORT).show();
+                    playTestClipCompat(finalDev);
                 } else {
-                    Toast.makeText(this, "Olmadı: UPnP açıklaması ya da AVTransport bulunamadı.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Olmadı: UPnP açıklaması/AVTransport yok veya yanıt gelmedi.", Toast.LENGTH_LONG).show();
                 }
             });
         }).start();
@@ -381,17 +367,11 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 DlnaControl ctl = DlnaControl.fromDevice(dev);
-                if (ctl == null) {
-                    runOnUiThread(() -> Toast.makeText(this, "DLNA denetim URL’leri bulunamadı.", Toast.LENGTH_LONG).show());
-                    return;
-                }
-                DlnaControl.PushReport rep = ctl.playUrlCompat(TEST_URL, TEST_MIME);
+                if (ctl == null) { runOnUiThread(() -> Toast.makeText(this, "DLNA denetim URL’leri yok.", Toast.LENGTH_LONG).show()); return; }
+                DlnaControl.PushReport rep = ctl.playUrlCompat(TEST_URL, TEST_MIME, SOAP_TIMEOUT_MS);
                 String human = rep.humanReadable();
                 dbg("PUSH REPORT:\n" + human);
-                runOnUiThread(() -> {
-                    Toast.makeText(this, rep.success ? "Tamam! TV’de test video oynuyor." : ("Olmadı:\n" + human),
-                            Toast.LENGTH_LONG).show();
-                });
+                runOnUiThread(() -> Toast.makeText(this, rep.success ? "Tamam! TV’de test video oynuyor." : ("Olmadı:\n" + human), Toast.LENGTH_LONG).show());
             } catch (Throwable e) {
                 dbg("playTestClipCompat error", e);
                 runOnUiThread(() -> Toast.makeText(this, "Push sırasında hata.", Toast.LENGTH_LONG).show());
@@ -413,21 +393,10 @@ public class MainActivity extends AppCompatActivity {
         s.setSupportMultipleWindows(true);
 
         wv.setWebViewClient(new WebViewClient() {
-            @Override public void onPageFinished(WebView v, String url) {
-                super.onPageFinished(v, url);
-                evaluateVideoProbe();
-            }
-            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                Uri u = (r != null) ? r.getUrl() : null;
-                if (u != null) v.loadUrl(u.toString());
-                return true;
-            }
-            @Override public boolean shouldOverrideUrlLoading(WebView v, String url) {
-                if (url != null) v.loadUrl(url);
-                return true;
-            }
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            @Override public void onPageFinished(WebView v, String url) { super.onPageFinished(v, url); evaluateVideoProbe(); }
+            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) { Uri u = (r != null) ? r.getUrl() : null; if (u != null) v.loadUrl(u.toString()); return true; }
+            @Override public boolean shouldOverrideUrlLoading(WebView v, String url) { if (url != null) v.loadUrl(url); return true; }
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 try {
                     Uri u = request.getUrl();
                     if (u != null) {
@@ -476,27 +445,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class JsBridge {
-        @JavascriptInterface public void onVideoUrl(String url) {
-            dbg("JS video url: " + url);
-            lastMediaUrl = url;
-        }
+        @JavascriptInterface public void onVideoUrl(String url) { dbg("JS video url: " + url); lastMediaUrl = url; }
         @JavascriptInterface public void onNoVideo() { dbg("JS: no <video> on page"); }
     }
 
-    /* === (Opsiyonel) Sayfa içi bulunan URL'yi push etmek için çağırın === */
     private void tryAutoDetectAndPush() {
         String candidate = lastMediaUrl;
-        if (candidate == null) {
-            Toast.makeText(this, "Önce videoyu başlatın ya da sayfada video bulun.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (candidate == null) { Toast.makeText(this, "Önce videoyu başlatın ya da sayfada video bulun.", Toast.LENGTH_SHORT).show(); return; }
         new Thread(() -> {
             try {
                 String playUrl = candidate;
                 String mime = guessMime(playUrl);
                 DlnaControl ctl = DlnaControl.fromDevice(selectedDevice);
                 DlnaControl.PushReport rep = (ctl != null)
-                        ? ctl.playUrlCompat(playUrl, mime)
+                        ? ctl.playUrlCompat(playUrl, mime, SOAP_TIMEOUT_MS)
                         : DlnaControl.PushReport.fail("NoControl", "DLNA control not available");
                 dbg("AUTO PUSH REPORT:\n" + rep.humanReadable());
                 runOnUiThread(() -> Toast.makeText(this,
@@ -518,10 +480,13 @@ public class MainActivity extends AppCompatActivity {
         return "video/*";
     }
 
-    /* ===================== DLNA/UPnP: MODEL + TARAYICI + KONTROL ===================== */
+    /* ===================== DLNA/UPnP ===================== */
 
-    static class DlnaDevice { String usn, st, server, location, friendlyName; String avTransportCtrl, avTransportUrn;
-        String displayName() { return friendlyName!=null? friendlyName : (server!=null? server : (usn!=null? usn : "DLNA Aygıtı")); } }
+    static class DlnaDevice {
+        String usn, st, server, location, friendlyName;
+        String avTransportCtrl, avTransportUrn;
+        String displayName() { return friendlyName!=null? friendlyName : (server!=null? server : (usn!=null? usn : "DLNA Aygıtı")); }
+    }
 
     interface SendHook { void onSend(String st, int count); }
     interface RespHook { void onResp(String from, String usn, String location); }
@@ -531,11 +496,10 @@ public class MainActivity extends AppCompatActivity {
         private static final String SSDP_ADDR = "239.255.255.250";
         private static final int SSDP_PORT = 1900;
 
-        // Genişletilmiş tarama: çoklu ST + tekrar + 10 sn alım
+        // Çoklu ST + 3 tekrar + 15 sn dinleme
         static List<DlnaDevice> scanExtended(int windowMs, SendHook sendHook, RespHook respHook, CancelFlag cancel) throws Exception {
             long deadline = SystemClock.elapsedRealtime() + windowMs;
             Map<String, DlnaDevice> map = new LinkedHashMap<>();
-
             String[] sts = new String[]{
                     "urn:schemas-upnp-org:device:MediaRenderer:1",
                     "urn:schemas-upnp-org:service:AVTransport:1",
@@ -545,11 +509,11 @@ public class MainActivity extends AppCompatActivity {
                     "ssdp:all"
             };
 
-            try (DatagramSocket sock = new DatagramSocket()) {
+            try (DatagramSocket sock = new DatagramSocket(null)) {
                 sock.setReuseAddress(true);
+                sock.bind(new InetSocketAddress(0));
                 sock.setSoTimeout(900);
 
-                // Her ST için 3 gönderim
                 for (String st : sts) {
                     String msearch = "M-SEARCH * HTTP/1.1\r\n" +
                             "HOST: " + SSDP_ADDR + ":" + SSDP_PORT + "\r\n" +
@@ -557,8 +521,7 @@ public class MainActivity extends AppCompatActivity {
                             "MX: 2\r\n" +
                             "ST: " + st + "\r\n\r\n";
                     byte[] data = msearch.getBytes(StandardCharsets.US_ASCII);
-                    DatagramPacket dp = new DatagramPacket(data, data.length,
-                            InetAddress.getByName(SSDP_ADDR), SSDP_PORT);
+                    DatagramPacket dp = new DatagramPacket(data, data.length, InetAddress.getByName(SSDP_ADDR), SSDP_PORT);
                     for (int i=1;i<=3;i++){
                         sock.send(dp); if (sendHook != null) sendHook.onSend(st, i);
                         Thread.sleep(120);
@@ -575,15 +538,57 @@ public class MainActivity extends AppCompatActivity {
                         DlnaDevice d = parseResponse(txt);
                         if (d != null && d.usn != null) {
                             if (respHook != null) respHook.onResp(resp.getAddress().getHostAddress(), d.usn, d.location);
-                            if (d.location != null && d.friendlyName == null) {
-                                d.friendlyName = fetchFriendlyName(d.location, 900);
-                            }
+                            if (d.location != null && d.friendlyName == null) d.friendlyName = fetchFriendlyName(d.location, 900);
                             map.put(d.usn, d);
                         }
                     } catch (SocketTimeoutException ignore) {}
                 }
             }
             return new ArrayList<>(map.values());
+        }
+
+        // IP’ye unicast SSDP M-SEARCH
+        static DlnaDevice tryUnicastSsdp(String ip, int listenMs) {
+            try (DatagramSocket sock = new DatagramSocket(null)) {
+                sock.setReuseAddress(true);
+                sock.bind(new InetSocketAddress(0));
+                sock.setSoTimeout(listenMs);
+
+                String[] sts = new String[]{
+                        "urn:schemas-upnp-org:device:MediaRenderer:1",
+                        "urn:schemas-upnp-org:service:AVTransport:1",
+                        "urn:schemas-upnp-org:service:AVTransport:2",
+                        "upnp:rootdevice"
+                };
+                for (String st: sts) {
+                    String msearch = "M-SEARCH * HTTP/1.1\r\n" +
+                            "HOST: " + ip + ":" + SSDP_PORT + "\r\n" +
+                            "MAN: \"ssdp:discover\"\r\n" +
+                            "MX: 2\r\n" +
+                            "ST: " + st + "\r\n\r\n";
+                    byte[] data = msearch.getBytes(StandardCharsets.US_ASCII);
+                    DatagramPacket dp = new DatagramPacket(data, data.length, InetAddress.getByName(ip), SSDP_PORT);
+                    sock.send(dp);
+                    Thread.sleep(60);
+                }
+
+                long end = SystemClock.elapsedRealtime() + listenMs;
+                byte[] buf = new byte[4096];
+                while (SystemClock.elapsedRealtime() < end) {
+                    DatagramPacket resp = new DatagramPacket(buf, buf.length);
+                    try {
+                        sock.receive(resp);
+                        String txt = new String(resp.getData(), 0, resp.getLength(), StandardCharsets.UTF_8);
+                        DlnaDevice d = parseResponse(txt);
+                        if (d != null && d.usn != null) {
+                            if (d.location != null && d.friendlyName == null)
+                                d.friendlyName = fetchFriendlyName(d.location, 900);
+                            return d;
+                        }
+                    } catch (SocketTimeoutException ignore) {}
+                }
+            } catch (Throwable ignored) {}
+            return null;
         }
 
         private static DlnaDevice parseResponse(String txt) {
@@ -606,27 +611,21 @@ public class MainActivity extends AppCompatActivity {
             BufferedReader br = null;
             try {
                 HttpURLConnection c = (HttpURLConnection) new URL(locationUrl).openConnection();
-                c.setConnectTimeout(timeoutMs);
-                c.setReadTimeout(timeoutMs);
-                c.setInstanceFollowRedirects(true);
-                c.connect();
+                c.setConnectTimeout(timeoutMs); c.setReadTimeout(timeoutMs);
+                c.setInstanceFollowRedirects(true); c.connect();
                 br = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
-                StringBuilder sb = new StringBuilder();
-                String line;
+                StringBuilder sb = new StringBuilder(); String line;
                 while ((line = br.readLine()) != null) {
                     sb.append(line);
                     int s = sb.indexOf("<friendlyName>");
-                    if (s >= 0) {
-                        int e = sb.indexOf("</friendlyName>", s);
-                        if (e > s) return sb.substring(s + 14, e).trim();
-                    }
+                    if (s >= 0) { int e = sb.indexOf("</friendlyName>", s);
+                        if (e > s) return sb.substring(s + 14, e).trim(); }
                 }
             } catch (Throwable ignored) {
             } finally { try { if (br != null) br.close(); } catch (Throwable ignore) {} }
             return null;
         }
 
-        // Kullanıcı IP verirse yaygın description yollarını dene (uzatılmış)
         static DlnaDevice tryCommonDescriptionOnIp(String ip) {
             String[] paths = new String[]{
                     "/description.xml", "/rootDesc.xml", "/DeviceDescription.xml",
@@ -656,7 +655,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /* === DLNA kontrol katmanı: AVTransport (versiyon-duyarlı + uyumluluk denemeleri) === */
+    /* === DLNA kontrol katmanı: AVTransport uyumluluk denemeleri + ayrıntılı rapor === */
     static class DlnaControl {
         final DlnaDevice dev;
         DlnaControl(DlnaDevice d){ this.dev = d; }
@@ -665,174 +664,75 @@ public class MainActivity extends AppCompatActivity {
             fillServiceInfo(d);
             return (d != null && d.avTransportCtrl != null && d.avTransportUrn != null) ? new DlnaControl(d) : null;
         }
-
         static void fillServiceInfo(DlnaDevice d) {
             if (d == null || d.location == null || d.avTransportCtrl != null) return;
             try {
                 String desc = httpGet(d.location, DESC_TIMEOUT_MS);
                 if (desc == null) return;
                 String base = baseUrlOf(d.location);
-
                 ServiceInfo avt = findService(desc, "AVTransport");
                 if (avt != null && avt.controlURL != null && avt.serviceType != null) {
                     d.avTransportCtrl = join(base, avt.controlURL);
-                    d.avTransportUrn  = avt.serviceType; // urn:schemas-upnp-org:service:AVTransport:X
+                    d.avTransportUrn  = avt.serviceType;
                 }
             } catch (Throwable ignored) {}
         }
 
-        /* ---- Push uyumluluk matrisi + rapor ---- */
-        static class StepResult {
-            String step; int http; String soapFault;
-            boolean ok() { return http >= 200 && http < 300 && (soapFault == null || soapFault.isEmpty()); }
-        }
+        static class StepResult { String step; int http; String soapFault; boolean ok(){ return http>=200 && http<300 && (soapFault==null || soapFault.isEmpty()); } }
         static class PushReport {
             boolean success; List<StepResult> steps = new ArrayList<>();
-            static PushReport fail(String step, String msg) {
-                PushReport pr = new PushReport();
-                StepResult r = new StepResult(); r.step = step; r.http = -1; r.soapFault = msg; pr.steps.add(r);
-                pr.success = false; return pr;
-            }
-            String humanReadable() {
-                StringBuilder sb = new StringBuilder();
-                sb.append(success? "SUCCESS" : "FAIL").append("\n");
-                for (StepResult r: steps) {
-                    sb.append("• ").append(r.step).append(" -> HTTP=").append(r.http);
-                    if (r.soapFault != null && !r.soapFault.isEmpty())
-                        sb.append(" SOAP=").append(r.soapFault);
-                    sb.append("\n");
-                }
-                return sb.toString().trim();
-            }
+            static PushReport fail(String step, String msg){ PushReport pr=new PushReport(); StepResult r=new StepResult(); r.step=step; r.http=-1; r.soapFault=msg; pr.steps.add(r); pr.success=false; return pr; }
+            String humanReadable(){ StringBuilder sb=new StringBuilder(); sb.append(success? "SUCCESS" : "FAIL").append("\n"); for (StepResult r: steps){ sb.append("• ").append(r.step).append(" -> HTTP=").append(r.http); if (r.soapFault!=null && !r.soapFault.isEmpty()) sb.append(" SOAP=").append(r.soapFault); sb.append("\n"); } return sb.toString().trim(); }
         }
 
-        PushReport playUrlCompat(String mediaUrl, String mime) {
+        PushReport playUrlCompat(String mediaUrl, String mime, int soapTimeoutMs) {
             PushReport rep = new PushReport();
-            // Deneme 0: STOP (sessiz)
-            soapQuiet("Stop", "<u:Stop xmlns:u=\""+dev.avTransportUrn+"\"><InstanceID>0</InstanceID></u:Stop>");
+            soapQuiet("Stop", "<u:Stop xmlns:u=\""+dev.avTransportUrn+"\"><InstanceID>0</InstanceID></u:Stop>", soapTimeoutMs);
 
-            // 1) Set (Empty meta) -> Play
-            StepResult s1 = setUri(mediaUrl, null);
-            rep.steps.add(s1);
-            if (s1.ok()) {
-                sleep(600);
-                StepResult p1 = play();
-                rep.steps.add(p1);
-                if (p1.ok()) { rep.success = true; return rep; }
-            }
+            StepResult s1 = setUri(mediaUrl, null, 0, soapTimeoutMs); rep.steps.add(s1);
+            if (s1.ok()) { sleep(600); StepResult p1 = play(0, soapTimeoutMs); rep.steps.add(p1); if (p1.ok()){ rep.success=true; return rep; } }
 
-            // 2) Set (DIDL) -> Play
-            StepResult s2 = setUri(mediaUrl, didlLiteFor(mediaUrl, mime));
-            rep.steps.add(s2);
-            if (s2.ok()) {
-                sleep(600);
-                StepResult p2 = play();
-                rep.steps.add(p2);
-                if (p2.ok()) { rep.success = true; return rep; }
-            }
+            StepResult s2 = setUri(mediaUrl, didlLiteFor(mediaUrl, mime), 0, soapTimeoutMs); rep.steps.add(s2);
+            if (s2.ok()) { sleep(600); StepResult p2 = play(0, soapTimeoutMs); rep.steps.add(p2); if (p2.ok()){ rep.success=true; return rep; } }
 
-            // 3) Stop -> Set (DIDL) -> Play
-            StepResult st3 = stop();
-            rep.steps.add(st3);
-            StepResult s3 = setUri(mediaUrl, didlLiteFor(mediaUrl, mime));
-            rep.steps.add(s3);
-            if (s3.ok()) {
-                sleep(600);
-                StepResult p3 = play();
-                rep.steps.add(p3);
-                if (p3.ok()) { rep.success = true; return rep; }
-            }
+            StepResult st3 = stop(0, soapTimeoutMs); rep.steps.add(st3);
+            StepResult s3 = setUri(mediaUrl, didlLiteFor(mediaUrl, mime), 0, soapTimeoutMs); rep.steps.add(s3);
+            if (s3.ok()) { sleep(600); StepResult p3 = play(0, soapTimeoutMs); rep.steps.add(p3); if (p3.ok()){ rep.success=true; return rep; } }
 
-            // 4) InstanceID=1 ile dene
-            StepResult s4 = setUriWithInstance(mediaUrl, didlLiteFor(mediaUrl, mime), 1);
-            rep.steps.add(s4);
-            if (s4.ok()) {
-                sleep(600);
-                StepResult p4 = playWithInstance(1);
-                rep.steps.add(p4);
-                if (p4.ok()) { rep.success = true; return rep; }
-            }
+            StepResult s4 = setUri(mediaUrl, didlLiteFor(mediaUrl, mime), 1, soapTimeoutMs); rep.steps.add(s4);
+            if (s4.ok()) { sleep(600); StepResult p4 = play(1, soapTimeoutMs); rep.steps.add(p4); if (p4.ok()){ rep.success=true; return rep; } }
 
-            // 5) SetNext -> Play (destekliyse)
-            StepResult sn = setNext(mediaUrl, didlLiteFor(mediaUrl, mime));
-            rep.steps.add(sn);
-            if (sn.ok()) {
-                StepResult p5 = play();
-                rep.steps.add(p5);
-                if (p5.ok()) { rep.success = true; return rep; }
-            }
+            StepResult sn = setNext(mediaUrl, didlLiteFor(mediaUrl, mime), 0, soapTimeoutMs); rep.steps.add(sn);
+            if (sn.ok()) { StepResult p5 = play(0, soapTimeoutMs); rep.steps.add(p5); if (p5.ok()){ rep.success=true; return rep; } }
 
             return rep;
         }
 
-        private StepResult stop() {
-            String body = "<u:Stop xmlns:u=\""+dev.avTransportUrn+"\"><InstanceID>0</InstanceID></u:Stop>";
-            return doSoap("Stop", body);
-        }
-        private void soapQuiet(String action, String inner) {
-            try { doSoap(action, inner); } catch (Throwable ignore) {}
-        }
-        private StepResult play() {
-            String body = "<u:Play xmlns:u=\"" + dev.avTransportUrn + "\">" +
-                    "<InstanceID>0</InstanceID><Speed>1</Speed></u:Play>";
-            return doSoap("Play", body);
-        }
-        private StepResult playWithInstance(int id) {
-            String body = "<u:Play xmlns:u=\"" + dev.avTransportUrn + "\">" +
-                    "<InstanceID>"+id+"</InstanceID><Speed>1</Speed></u:Play>";
-            return doSoap("Play", body);
-        }
-        private StepResult setUri(String url, String meta) {
-            String md = (meta == null) ? "" : xmlEsc(meta);
+        private StepResult stop(int instanceId, int to){ String body="<u:Stop xmlns:u=\""+dev.avTransportUrn+"\"><InstanceID>"+instanceId+"</InstanceID></u:Stop>"; return doSoap("Stop", body, to); }
+        private void soapQuiet(String action, String inner, int to){ try { doSoap(action, inner, to); } catch (Throwable ignore) {} }
+        private StepResult play(int instanceId, int to){ String body="<u:Play xmlns:u=\""+dev.avTransportUrn+"\"><InstanceID>"+instanceId+"</InstanceID><Speed>1</Speed></u:Play>"; return doSoap("Play", body, to); }
+        private StepResult setUri(String url, String meta, int instanceId, int to){
+            String md = (meta==null)? "" : xmlEsc(meta);
             String body = "<u:SetAVTransportURI xmlns:u=\"" + dev.avTransportUrn + "\">" +
-                    "<InstanceID>0</InstanceID>" +
-                    "<CurrentURI>" + xmlEsc(url) + "</CurrentURI>" +
-                    "<CurrentURIMetaData>" + md + "</CurrentURIMetaData>" +
-                    "</u:SetAVTransportURI>";
-            return doSoap("SetAVTransportURI", body);
+                    "<InstanceID>"+instanceId+"</InstanceID><CurrentURI>"+xmlEsc(url)+"</CurrentURI>" +
+                    "<CurrentURIMetaData>"+md+"</CurrentURIMetaData></u:SetAVTransportURI>";
+            return doSoap("SetAVTransportURI", body, to);
         }
-        private StepResult setUriWithInstance(String url, String meta, int id) {
-            String md = (meta == null) ? "" : xmlEsc(meta);
-            String body = "<u:SetAVTransportURI xmlns:u=\"" + dev.avTransportUrn + "\">" +
-                    "<InstanceID>"+id+"</InstanceID>" +
-                    "<CurrentURI>" + xmlEsc(url) + "</CurrentURI>" +
-                    "<CurrentURIMetaData>" + md + "</CurrentURIMetaData>" +
-                    "</u:SetAVTransportURI>";
-            return doSoap("SetAVTransportURI", body);
-        }
-        private StepResult setNext(String url, String meta) {
-            String md = (meta == null) ? "" : xmlEsc(meta);
+        private StepResult setNext(String url, String meta, int instanceId, int to){
+            String md = (meta==null)? "" : xmlEsc(meta);
             String body = "<u:SetNextAVTransportURI xmlns:u=\"" + dev.avTransportUrn + "\">" +
-                    "<InstanceID>0</InstanceID>" +
-                    "<NextURI>" + xmlEsc(url) + "</NextURI>" +
-                    "<NextURIMetaData>" + md + "</NextURIMetaData>" +
-                    "</u:SetNextAVTransportURI>";
-            return doSoap("SetNextAVTransportURI", body);
-        }
-
-        private StepResult doSoap(String action, String inner) {
-            StepResult r = new StepResult();
-            r.step = action;
-            try {
-                SoapResponse resp = soap(dev.avTransportCtrl, dev.avTransportUrn, action, inner);
-                r.http = resp.httpCode;
-                r.soapFault = resp.faultCode;
-            } catch (Throwable e) {
-                r.http = -1; r.soapFault = e.getClass().getSimpleName()+": "+e.getMessage();
-            }
-            return r;
+                    "<InstanceID>"+instanceId+"</InstanceID><NextURI>"+xmlEsc(url)+"</NextURI>" +
+                    "<NextURIMetaData>"+md+"</NextURIMetaData></u:SetNextAVTransportURI>";
+            return doSoap("SetNextAVTransportURI", body, to);
         }
 
         /* ===== helpers ===== */
         private static class ServiceInfo { String serviceType; String controlURL; }
         private static ServiceInfo findService(String descXml, String name) {
             String needle = "urn:schemas-upnp-org:service:" + name + ":";
-            int pos = descXml.indexOf(needle);
-            if (pos < 0) return null;
-            int st1 = descXml.lastIndexOf("<serviceType>", pos);
-            int st2 = descXml.indexOf("</serviceType>", pos);
-            int c1  = descXml.indexOf("<controlURL>", pos);
-            int c2  = descXml.indexOf("</controlURL>", c1);
+            int pos = descXml.indexOf(needle); if (pos < 0) return null;
+            int st1 = descXml.lastIndexOf("<serviceType>", pos), st2 = descXml.indexOf("</serviceType>", pos);
+            int c1  = descXml.indexOf("<controlURL>", pos),  c2  = descXml.indexOf("</controlURL>", c1);
             if (st1<0 || st2<0 || c1<0 || c2<0) return null;
             ServiceInfo s = new ServiceInfo();
             s.serviceType = descXml.substring(st1 + 13, st2).trim();
@@ -841,19 +741,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         static class SoapResponse { int httpCode; String faultCode; }
-        private static SoapResponse soap(String ctrlUrl, String urn, String action, String inner) throws Exception {
+        private static SoapResponse soap(String ctrlUrl, String urn, String action, String inner, int timeoutMs) throws Exception {
             SoapResponse out = new SoapResponse();
-            if (ctrlUrl == null || urn == null) { out.httpCode = -1; out.faultCode = "NoControlUrlOrUrn"; return out; }
+            if (ctrlUrl == null || urn == null) { out.httpCode=-1; out.faultCode="NoControlUrlOrUrn"; return out; }
 
-            byte[] body = (
-                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
-                            "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
-                            "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
-                            "<s:Body>" + inner + "</s:Body></s:Envelope>"
-            ).getBytes(StandardCharsets.UTF_8);
+            byte[] body = ("<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
+                    "<s:Body>" + inner + "</s:Body></s:Envelope>").getBytes(StandardCharsets.UTF_8);
 
             HttpURLConnection c = (HttpURLConnection) new URL(ctrlUrl).openConnection();
-            c.setConnectTimeout(4000); c.setReadTimeout(4000);
+            c.setConnectTimeout(timeoutMs); c.setReadTimeout(timeoutMs);
             c.setDoOutput(true); c.setRequestMethod("POST");
             c.setRequestProperty("Content-Type", "text/xml; charset=\"utf-8\"");
             c.setRequestProperty("SOAPAction", "\"" + urn + "#" + action + "\"");
@@ -861,35 +758,26 @@ public class MainActivity extends AppCompatActivity {
             int code = c.getResponseCode();
             out.httpCode = code;
 
-            if (code >= 200 && code < 300) {
-                out.faultCode = "";
-                return out;
-            }
+            if (code >= 200 && code < 300) { out.faultCode=""; return out; }
 
-            // SOAP Fault gövdesini parse etmeye çalış
             String fault = null;
             try (BufferedReader br = new BufferedReader(new InputStreamReader(
                     (code >= 400 ? c.getErrorStream() : c.getInputStream()), StandardCharsets.UTF_8))) {
                 StringBuilder sb = new StringBuilder(); String line;
                 while ((line = br.readLine()) != null) sb.append(line);
                 String xml = sb.toString();
-                // basit çekirdek parse
-                int i = xml.indexOf("<faultcode>");
-                if (i>=0) {
-                    int j = xml.indexOf("</faultcode>", i);
-                    if (j>i) fault = xml.substring(i+11, j).trim();
-                }
-                if (fault == null) {
-                    // Bazı cihazlar detail->errorCode verir
-                    int k = xml.indexOf("<errorCode>");
-                    if (k>=0) {
-                        int j = xml.indexOf("</errorCode>", k);
-                        if (j>k) fault = "errorCode:" + xml.substring(k+11, j).trim();
-                    }
-                }
+                int i = xml.indexOf("<faultcode>"); if (i>=0){ int j=xml.indexOf("</faultcode>", i); if (j>i) fault = xml.substring(i+11, j).trim(); }
+                if (fault == null) { int k=xml.indexOf("<errorCode>"); if (k>=0){ int j=xml.indexOf("</errorCode>", k); if (j>k) fault="errorCode:"+xml.substring(k+11, j).trim(); } }
             } catch (Throwable ignore) {}
             out.faultCode = (fault != null ? fault : "HTTP_"+code);
             return out;
+        }
+
+        private StepResult doSoap(String action, String inner, int to) {
+            StepResult r = new StepResult(); r.step = action;
+            try { SoapResponse resp = soap(dev.avTransportCtrl, dev.avTransportUrn, action, inner, to); r.http = resp.httpCode; r.soapFault = resp.faultCode; }
+            catch (Throwable e) { r.http = -1; r.soapFault = e.getClass().getSimpleName()+": "+e.getMessage(); }
+            return r;
         }
 
         private static String didlLiteFor(String url, String mime) {
@@ -925,8 +813,7 @@ public class MainActivity extends AppCompatActivity {
             try { return new URL(new URL(base + "/"), path).toString(); } catch (Throwable e) { return path; }
         }
         private static String xmlEsc(String s) {
-            return s.replace("&","&amp;").replace("<","&lt;")
-                    .replace(">","&gt;").replace("\"","&quot;").replace("'","&apos;");
+            return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&apos;");
         }
         private static void sleep(long ms){ try { Thread.sleep(ms); } catch (InterruptedException ignored) {} }
     }
@@ -961,11 +848,36 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+    private void prepareMulticast() {
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                mlock = wm.createMulticastLock("minicast-dlna");
+                mlock.setReferenceCounted(false);
+            }
+        } catch (Throwable e) { dbg("multicast lock prepare failed", e); }
+    }
+    private void bindToWifiNetwork() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkRequest req = new NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .build();
+            cm.requestNetwork(req, new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network network) {
+                    try {
+                        if (Build.VERSION.SDK_INT >= 23) {
+                            ConnectivityManager cm2 = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                            cm2.bindProcessToNetwork(network); // deprecated ama iş görüyor
+                            dbg("Process bound to Wi-Fi network");
+                        }
+                    } catch (Throwable e) { dbg("bindProcessToNetwork failed", e); }
+                }
+            });
+        } catch (Throwable e) { dbg("requestNetwork/bind Wi-Fi failed", e); }
+    }
     private void acquireMl(boolean on) {
         if (mlock == null) return;
-        try {
-            if (on && !mlock.isHeld()) mlock.acquire();
-            else if (!on && mlock.isHeld()) mlock.release();
-        } catch (Throwable ignored) {}
+        try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); } catch (Throwable ignored) {}
     }
-                                   }
+            }
