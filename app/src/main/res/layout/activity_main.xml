@@ -47,6 +47,16 @@
                 android:paddingEnd="14dp"/>
         </LinearLayout>
 
+        <!-- Yeni eklenen IP tarama butonu -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnScan"
+            style="@style/Widget.Material3.Button.FilledTonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="192.168.129.x TARA"
+            android:onClick="onClickScan129Range"
+            android:layout_margin="12dp"/>
+
         <WebView
             android:id="@+id/web"
             android:layout_width="match_parent"
