@@ -863,6 +863,7 @@ public class MainActivity extends AppCompatActivity {
             NetworkRequest req = new NetworkRequest.Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                     .build();
+        /* Not: requestNetwork callback’i OS yönetiyor; burada sadece Wi-Fi’ye bind etmeyi hedefliyoruz. */
             cm.requestNetwork(req, new ConnectivityManager.NetworkCallback() {
                 @Override public void onAvailable(Network network) {
                     try {
@@ -878,6 +879,9 @@ public class MainActivity extends AppCompatActivity {
     }
     private void acquireMl(boolean on) {
         if (mlock == null) return;
-        try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); } catch (Throwable ignored) {}
+        try {
+            if (on && !mlock.isHeld()) mlock.acquire();
+            else if (!on && mlock.isHeld()) mlock.release();
+        } catch (Throwable ignored) {}
     }
-            }
+                        }
