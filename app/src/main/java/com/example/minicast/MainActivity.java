@@ -867,4 +867,4 @@ public class MainActivity extends AppCompatActivity {
         try { if (on && !mlock.isHeld()) mlock.acquire(); else if (!on && mlock.isHeld()) mlock.release(); }
         catch (Throwable ignored) {}
     }
-    }
+            }
