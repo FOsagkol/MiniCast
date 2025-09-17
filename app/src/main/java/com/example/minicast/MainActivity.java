@@ -138,4 +138,3 @@ public class MainActivity extends AppCompatActivity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) applyImmersiveFullscreen();
     }
-}
